@@ -50,7 +50,7 @@
 | `todoHandler` | Lambda | メモリ 256 MB, 30 sec, **Rust** target `x86_64-unknown-linux-musl` |
 | `todoTable` | DynamoDB | PK=`FamilyID` (S), SK=`ItemID` (S)；GSI1=`FamilyID#History` sort=`Timestamp` |
 | `todoBucket` | S3 | 静的サイト・サーバーアクセスログは別バケット |
-| `todoCdn` | CloudFront | オリジン=S3、OAI でバケットアクセス |
+| `todoCdn` | CloudFront | オリジン=S3、OAC でバケットアクセス |
 | `todoLogs` | CloudWatch Log Group | Retention=1 year (コスト削減) |
 
 ### IAM ロール / ポリシー
