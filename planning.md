@@ -69,15 +69,16 @@
 ```yaml
 steps:
   - uses: actions/checkout@v4
+  - uses: actions/setup-node@v4 # SAMはNode.jsに依存
+  - uses: aws-actions/setup-sam@v2
   - uses: dtolnay/rust-toolchain@stable
-  - run: cargo test
-  - run: cargo lambda build --release
+  # 'sam build' はRust (cargo-lambda) もサポート
+  - run: sam build --use-container
   - uses: aws-actions/configure-aws-credentials@v4
     with:
       role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
-  - run: aws lambda update-function-code --function-name todoHandler \
-         --zip-file fileb://target/lambda/todoHandler/bootstrap.zip
-  - run: aws cloudformation deploy --template-file infra/template.yaml ...
+  # 'sam deploy' でコードとインフラを同時にデプロイ
+  - run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset
 ```
 
 2. **Frontend ワークフロー** (`frontend.yml`)
