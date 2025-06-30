@@ -1,1 +1,9 @@
-target
+# Rustのコンパイル出力
+/target/
+
+# Rustのデバッグとリリースビルドの成果物
+**/*.rs.bk
+*.pdb
+
+# テスト関連の一時ファイル
+*.profraw
