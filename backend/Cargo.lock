@@ -68,7 +68,10 @@ dependencies = [
 name = "backend"
 version = "0.1.0"
 dependencies = [
+ "http",
  "lambda_http",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
