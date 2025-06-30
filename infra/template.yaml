@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 家族用 ToDo 共有アプリ - バックエンド（Lambda、API Gateway）
+
+# グローバルパラメータ
+Parameters:
+  RetentionInDays:
+    Type: Number
+    Default: '365'
+    Description: CloudWatch Logsの保持期間（日数）
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Architectures:
+      - arm64
+    Runtime: provided.al2023
+    Tracing: Active
+    LoggingConfig:
+      LogFormat: JSON
+    Environment:
+      Variables:
+        RUST_LOG: info
+
+Resources:
+  # ===== IAM ロール =====
+  TodoLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: todo-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  # ===== Lambda 関数 =====
+  todoHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: todo-handler
+      CodeUri: ../backend/
+      Handler: bootstrap
+      Description: ToDo アプリケーションのメインハンドラー
+      Role: !GetAtt TodoLambdaRole.Arn
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref todoApi
+            Path: /{proxy+}
+            Method: ANY
+            Auth:
+              Authorizer: NONE
+    # ビルドにはcargo-lambdaを指定
+    Metadata:
+      BuildMethod: rust-cargolambda
+
+  # ===== API Gateway =====
+  todoApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: api
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Amz-Date
+          - X-Api-Key
+          - X-Amz-Security-Token
+        AllowOrigins:
+          - '*'
+        MaxAge: 600
+
+  # ===== CloudWatch Logs =====
+  todoLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${todoHandler}
+      RetentionInDays: !Ref RetentionInDays
+
+
+Outputs:
+  ApiEndpoint:
+    Description: "API Gateway エンドポイント URL"
+    Value: !Sub https://${todoApi}.execute-api.${AWS::Region}.amazonaws.com/api/

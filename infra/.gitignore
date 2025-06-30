@@ -1,0 +1,7 @@
+# AWS SAM ビルド出力
+.aws-sam/
+
+# AWS認証情報や設定ファイル
+.aws/
+aws-config.json
+aws-credentials.json
