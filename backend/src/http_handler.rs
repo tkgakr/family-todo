@@ -5,6 +5,9 @@ use lambda_http::{Body, Error, Request, RequestExt, Response};
 /// There are some code example in the following URLs:
 /// - https://github.com/awslabs/aws-lambda-rust-runtime/tree/main/examples
 pub(crate) async fn function_handler(event: Request) -> Result<Response<Body>, Error> {
+    // リクエストがLambdaに到達したことを確認するためのデバッグログ
+    lambda_http::tracing::info!(?event, "Received request");
+
     // Extract some useful information from the request
     let who = event
         .query_string_parameters_ref()
