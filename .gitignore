@@ -1,3 +1,6 @@
+# backend, frontend, infra ディレクトリには
+# 各々の技術スタックに応じた .gitignore ファイルを別途配置しています。
+
 # エディタ関連
 .idea/
 .vscode/
