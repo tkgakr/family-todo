@@ -44,17 +44,30 @@
 
 ---
 
-## 3. DynamoDB 設計（イベントソーシング）
+## 3. 識別子設計
+
+### TodoId に ULID を採用
+
+- **形式**: 26 文字の Base32 エンコード（例: `01ARZ3NDEKTSV4RRFFQ69G5FAV`）
+- **利点**:
+  - タイムスタンプ付きで自然にソート可能
+  - UUID より短く、DynamoDB のキーとして効率的
+  - ID から作成時刻を推測可能（デバッグ性向上）
+  - Rust の `ulid` クレートで簡単に実装
+
+---
+
+## 4. DynamoDB 設計（イベントソーシング）
 
 ### イベントストアテーブル
 
 | 属性         | 型  | 説明                                                         |
 | ------------ | --- | ------------------------------------------------------------ |
 | **PK**       | S   | `FAMILY#${familyId}`                                         |
-| **SK**       | S   | `EVENT#${timestamp}#${eventId}`                              |
+| **SK**       | S   | `EVENT#${ulid}` (ULID 自体がタイムスタンプを含む)            |
 | EventType    | S   | `TodoCreated`, `TodoUpdated`, `TodoCompleted`, `TodoDeleted` |
 | EventVersion | N   | イベントスキーマバージョン                                   |
-| TodoId       | S   | UUID v4                                                      |
+| TodoId       | S   | ULID 形式                                                    |
 | UserId       | S   | 実行者 ID                                                    |
 | Timestamp    | S   | ISO8601                                                      |
 | Data         | M   | イベント固有のデータ                                         |
@@ -64,8 +77,8 @@
 | 属性           | 型   | 説明                 |
 | -------------- | ---- | -------------------- |
 | **PK**         | S    | `FAMILY#${familyId}` |
-| **SK**         | S    | `TODO#${todoId}`     |
-| TodoId         | S    | UUID                 |
+| **SK**         | S    | `TODO#${ulid}`       |
+| TodoId         | S    | ULID 形式            |
 | Title          | S    | タイトル             |
 | Description    | S    | 説明（オプション）   |
 | Completed      | BOOL | 完了フラグ           |
@@ -79,18 +92,24 @@
 
 - **GSI1**: アクティブな ToDo の効率的取得
   - PK: `FAMILY#${familyId}#ACTIVE`
-  - SK: `CREATED#${createdAt}`
+  - SK: `${ulid}` (作成時刻順に自然にソート)
   - 条件: Completed = false のアイテムのみ
+
+### 設計の利点
+
+- ULID により、SK でのソートが時系列順になる
+- 範囲クエリで特定期間の ToDo やイベントを効率的に取得可能
+- イベントの順序性が自然に保証される
 
 ---
 
-## 4. Lambda 関数アーキテクチャ
+## 5. Lambda 関数アーキテクチャ
 
-| 関数名               | 役割                             | トリガー               |
-| -------------------- | -------------------------------- | ---------------------- |
-| `TodoCommandHandler` | 書き込み処理（イベント生成）     | API Gateway (POST/PUT) |
-| `TodoEventProcessor` | イベントからプロジェクション更新 | DynamoDB Streams       |
-| `TodoQueryHandler`   | 読み取り処理                     | API Gateway (GET)      |
+| 関数名               | 役割                             | トリガー                      |
+| -------------------- | -------------------------------- | ----------------------------- |
+| `TodoCommandHandler` | 書き込み処理（イベント生成）     | API Gateway (POST/PUT/DELETE) |
+| `TodoEventProcessor` | イベントからプロジェクション更新 | DynamoDB Streams              |
+| `TodoQueryHandler`   | 読み取り処理                     | API Gateway (GET)             |
 
 ### IAM ロール設計
 
@@ -102,7 +121,7 @@
 
 ---
 
-## 5. API エンドポイント設計
+## 6. API エンドポイント設計
 
 | メソッド | パス                   | 説明          | ハンドラー     |
 | -------- | ---------------------- | ------------- | -------------- |
@@ -115,7 +134,7 @@
 
 ---
 
-## 6. イベントフロー
+## 7. イベントフロー
 
 ```mermaid
 sequenceDiagram
@@ -130,6 +149,7 @@ sequenceDiagram
 
     User->>API Gateway: POST /todos
     API Gateway->>CommandHandler: Invoke
+    CommandHandler->>CommandHandler: Generate ULID
     CommandHandler->>EventStore: Put TodoCreated Event
     EventStore->>DynamoDB Streams: Trigger
     DynamoDB Streams->>EventProcessor: Process Event
@@ -139,14 +159,63 @@ sequenceDiagram
 
     User->>API Gateway: GET /todos
     API Gateway->>QueryHandler: Invoke
-    QueryHandler->>Projection: Query
+    QueryHandler->>Projection: Query (sorted by ULID)
     Projection->>QueryHandler: Return Todos
     QueryHandler->>User: Response
 ```
 
 ---
 
-## 7. デプロイフロー（GitHub Actions）
+## 8. Rust 実装の要点
+
+### 依存関係
+
+```toml
+[dependencies]
+ulid = "1.1"
+aws-sdk-dynamodb = "1.0"
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+lambda_runtime = "0.9"
+lambda_web = "0.2"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+```
+
+### ULID を使用した TodoId の実装
+
+```rust
+use ulid::Ulid;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct TodoId(String);
+
+impl TodoId {
+    pub fn new() -> Self {
+        Self(Ulid::new().to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    // タイムスタンプ部分を抽出（デバッグ用）
+    pub fn timestamp(&self) -> Option<u64> {
+        Ulid::from_string(&self.0)
+            .ok()
+            .map(|ulid| ulid.timestamp_ms())
+    }
+}
+```
+
+---
+
+## 9. デプロイフロー（GitHub Actions）
 
 ### Backend ワークフロー (`backend.yml`)
 
@@ -233,7 +302,7 @@ jobs:
 
 ---
 
-## 8. ローカル開発環境
+## 10. ローカル開発環境
 
 | ツール             | 用途                     | 設定                                          |
 | ------------------ | ------------------------ | --------------------------------------------- |
@@ -265,21 +334,21 @@ services:
 
 ---
 
-## 9. 開発マイルストーン
+## 11. 開発マイルストーン
 
-| Sprint | ゴール               | 完了条件 (DoD)                                       |
-| ------ | -------------------- | ---------------------------------------------------- |
-| **0**  | 基盤セットアップ     | SAM テンプレート作成、CI/CD パイプライン稼働         |
-| **1**  | イベントストア実装   | CommandHandler でイベント保存、DynamoDB Streams 設定 |
-| **2**  | イベントプロセッサー | EventProcessor でプロジェクション更新確認            |
-| **3**  | 認証統合             | Cognito Passkey 登録・ログイン → JWT 検証            |
-| **4**  | クエリ API           | QueryHandler で ToDo 一覧・履歴取得                  |
-| **5**  | フロントエンド       | React でシンプルな ToDo 管理 UI 実装                 |
-| **6**  | 統合テスト           | E2E テスト、パフォーマンス検証（p95 < 200ms）        |
+| Sprint | ゴール               | 完了条件 (DoD)                                                    |
+| ------ | -------------------- | ----------------------------------------------------------------- |
+| **0**  | 基盤セットアップ     | SAM テンプレート作成、CI/CD パイプライン稼働                      |
+| **1**  | イベントストア実装   | CommandHandler でイベント保存（ULID 使用）、DynamoDB Streams 設定 |
+| **2**  | イベントプロセッサー | EventProcessor でプロジェクション更新確認                         |
+| **3**  | 認証統合             | Cognito Passkey 登録・ログイン → JWT 検証                         |
+| **4**  | クエリ API           | QueryHandler で ToDo 一覧・履歴取得（ULID でソート）              |
+| **5**  | フロントエンド       | React でシンプルな ToDo 管理 UI 実装                              |
+| **6**  | 統合テスト           | E2E テスト、パフォーマンス検証（p95 < 200ms）                     |
 
 ---
 
-## 10. コスト試算（月間 5 家族 × 1,000 リクエスト）
+## 12. コスト試算（月間 5 家族 × 1,000 リクエスト）
 
 | サービス         | 想定使用量                    | 月額費用          |
 | ---------------- | ----------------------------- | ----------------- |
@@ -293,7 +362,7 @@ services:
 
 ---
 
-## 11. セキュリティ & 運用
+## 13. セキュリティ & 運用
 
 ### セキュリティ対策
 
@@ -317,7 +386,7 @@ services:
 
 ---
 
-## 12. 技術的な学習ポイント
+## 14. 技術的な学習ポイント
 
 1. **イベントソーシング**
 
@@ -334,7 +403,7 @@ services:
 
    - Single Table Design
    - DynamoDB Streams の活用
-   - 効率的なアクセスパターン
+   - ULID による効率的なソート・範囲クエリ
 
 4. **サーバーレスアーキテクチャ**
 
@@ -343,21 +412,27 @@ services:
    - コールドスタート対策
 
 5. **Rust での AWS Lambda**
+
    - 高パフォーマンス実装
    - 型安全性の活用
    - cargo-lambda の使用
 
+6. **識別子設計**
+   - ULID の特性理解
+   - 分散システムでの ID 生成戦略
+
 ---
 
-## 13. 将来の拡張可能性
+## 15. 将来の拡張可能性
 
 - **通知機能**: EventBridge + SNS で実装可能
 - **ファイル添付**: S3 署名付き URL
 - **リアルタイム同期**: AppSync または WebSocket API
 - **分析機能**: Kinesis Data Firehose → S3 → Athena
+- **より複雑なイベント処理**: Step Functions でのサガパターン実装
 
 ---
 
 ## まとめ
 
-本プロジェクトは、シンプルな UI/UX を保ちながら、バックエンドで高度なイベントソーシングアーキテクチャを実装する学習プロジェクトです。AWS サーバーレスサービスと NoSQL (DynamoDB) の実践的な活用方法を習得できます。
+本プロジェクトは、シンプルな UI/UX を保ちながら、バックエンドで高度なイベントソーシングアーキテクチャを実装する学習プロジェクトです。ULID を採用することで、分散システムにおける効率的な ID 管理とソート可能性を実現し、AWS サーバーレスサービスと NoSQL (DynamoDB)
