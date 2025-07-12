@@ -1,7 +1,26 @@
 {
-  "httpMethod": "GET",
-  "path": "/todos",
+  "version": "2.0",
+  "routeKey": "GET /todos",
+  "rawPath": "/todos",
+  "rawQueryString": "name=test",
+  "headers": {
+    "content-type": "application/json"
+  },
   "queryStringParameters": {
     "name": "test"
-  }
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "api-id",
+    "domainName": "localhost",
+    "http": {
+      "method": "GET",
+      "path": "/todos",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1"
+    },
+    "requestId": "request-id",
+    "stage": "api"
+  },
+  "isBase64Encoded": false
 }
