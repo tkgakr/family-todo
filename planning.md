@@ -8,7 +8,7 @@
 
 | 層             | サービス                                          | 主な役割                                            |
 | -------------- | ------------------------------------------------- | --------------------------------------------------- |
-| **フロント**   | **S3** 静的ウェブホスティング／**CloudFront** CDN | React SPA (Vite + TS) 配信                          |
+| **フロント**   | **S3** 静的ウェブホスティング／**CloudFront** CDN | React SPA (Vite + TS + Biome) 配信                  |
 | **API**        | **API Gateway (HTTP)**                            | REST エンドポイント・CORS・Cognito JWT 検証         |
 |                | **AWS Lambda (Rust)**                             | コマンド/クエリハンドラー・イベントプロセッサー     |
 | **認証**       | **Amazon Cognito** (ユーザープール)               | Passkey (WebAuthn) + リフレッシュトークン           |
@@ -32,9 +32,10 @@
 │   ├── query-handler/      # 読み取り側
 │   ├── event-processor/    # ストリーム処理
 │   └── shared/            # 共通ドメインモデル
-├── frontend/           # React/TS (Vite)
+├── frontend/           # React/TS (Vite + Biome)
 │   ├── src/
-│   └── package.json
+│   ├── package.json
+│   └── biome.json      # Biome設定ファイル
 ├── .github/
 │   └── workflows/
 │       ├── backend.yml
@@ -280,6 +281,8 @@ jobs:
         run: |
           cd frontend
           npm ci
+          npm run lint
+          npm run format:check
           npm run test
           npm run build
         env:
@@ -311,6 +314,7 @@ jobs:
 | **LocalStack**     | Cognito エミュレーション | 認証フロー検証用                              |
 | **mkcert**         | HTTPS ローカル証明書     | Passkey 動作確認用                            |
 | **cargo-watch**    | Rust 自動リビルド        | `cargo watch -x test`                         |
+| **Biome**          | Frontend リント・フォーマット | `npm run lint`, `npm run format` |
 
 ### Docker Compose 設定例
 
