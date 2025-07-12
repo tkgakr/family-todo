@@ -2,6 +2,11 @@
 
 このファイルは、このリポジトリでコードを操作する際の Claude Code (claude.ai/code) 向けのガイダンスを提供します。
 
+## 参考資料
+
+- **README.md**: プロジェクト概要、開発環境セットアップ、使用技術
+- **PLANNING.md**: 詳細な技術アーキテクチャ計画、イベントソーシング設計、DynamoDB設計、ULID採用理由
+
 ## プロジェクト概要
 
 Rustバックエンド（AWS Lambda）と予定されているReact/TypeScriptフロントエンドで構築された家族用TODO共有アプリケーションです。アーキテクチャはイベントソーシングとCQRSパターンを使用したAWSサーバーレスサービスを活用しています。プロジェクトは現在初期開発段階で、バックエンドインフラストラクチャの基盤が完成しています。
@@ -45,7 +50,7 @@ cd infra && sam local invoke todoHandler -e events/event.json
 - **インフラストラクチャ**: Lambda、API Gateway、IAMロールを定義するAWS SAMテンプレート
 - **構造**: `backend/`（Rust）と`infra/`（SAMテンプレート）を含むモノレポ
 
-### 計画されたアーキテクチャ（planning.mdに基づく）
+### 計画されたアーキテクチャ（PLANNING.mdに基づく）
 プロジェクトはイベントソーシングとCQRSパターンを中心に設計されています：
 
 - **イベントストア**: ULID識別子で不変イベントを保存するDynamoDBテーブル
@@ -77,7 +82,7 @@ cd infra && sam local invoke todoHandler -e events/event.json
 │   ├── samconfig.toml       # SAM設定
 │   └── events/
 │       └── event.json       # ローカル開発用テストイベント
-├── planning.md        # 詳細な技術アーキテクチャ計画
+├── PLANNING.md        # 詳細な技術アーキテクチャ計画
 └── README.md
 ```
 
