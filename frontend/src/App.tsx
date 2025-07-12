@@ -7,7 +7,7 @@ function App() {
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
       <h1>家族用TODOアプリ</h1>
       <p>現在の開発状況: 基盤セットアップ中</p>
-      
+
       <div style={{ marginTop: "20px" }}>
         <button
           type="button"
@@ -25,7 +25,7 @@ function App() {
           カウント: {count}
         </button>
       </div>
-      
+
       <div style={{ marginTop: "20px", fontSize: "14px", color: "#666" }}>
         <p>技術スタック:</p>
         <ul>
