@@ -11,7 +11,7 @@ describe("App", () => {
   it("displays the current development status", () => {
     render(<App />);
     expect(
-      screen.getByText("現在の開発状況: 基盤セットアップ中")
+      screen.getAllByText("現在の開発状況: 基盤セットアップ中")[0]
     ).toBeDefined();
   });
 });
