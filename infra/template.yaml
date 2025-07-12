@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 家族用 ToDo 共有アプリ - バックエンド（Lambda、API Gateway）
+Description: 家族用 ToDo 共有アプリ - サーバーレスインフラストラクチャ
 
 # グローバルパラメータ
 Parameters:
@@ -8,6 +8,12 @@ Parameters:
     Type: Number
     Default: '365'
     Description: CloudWatch Logsの保持期間（日数）
+  
+  Environment:
+    Type: String
+    Default: 'dev'
+    AllowedValues: ['dev', 'staging', 'prod']
+    Description: デプロイ環境
 
 Globals:
   Function:
@@ -22,9 +28,23 @@ Globals:
     Environment:
       Variables:
         RUST_LOG: info
+        ENVIRONMENT: !Ref Environment
 
 Resources:
-  # ===== IAM ロール =====
+  # ===== 将来追加予定のリソース =====
+  # DynamoDB Tables (イベントストア、プロジェクション)
+  # - EventStoreTable: イベントソーシング用テーブル
+  # - ProjectionTable: 読み取り最適化されたテーブル
+  # DynamoDB Streams
+  # Amazon Cognito (認証)
+  # S3 + CloudFront (フロントエンド配信)
+  # 追加のLambda関数
+  # - TodoCommandHandler: 書き込み操作
+  # - TodoEventProcessor: イベント処理
+  # - TodoQueryHandler: 読み取り操作
+
+  # ===== 現在のリソース =====
+  # IAM ロール
   TodoLambdaRole:
     Type: AWS::IAM::Role
     Properties:
