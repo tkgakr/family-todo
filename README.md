@@ -36,6 +36,8 @@
 │   ├── tsconfig.json   # TypeScript設定
 │   ├── vite.config.ts  # Vite設定
 │   └── index.html      # HTMLテンプレート
+├── docs/               # プロジェクトドキュメント
+│   └── github-actions-setup.md # GitHub Actions AWS認証設定手順
 ├── PLANNING.md         # 詳細な技術アーキテクチャ計画
 ├── CLAUDE.md           # Claude Code向けガイダンス
 └── README.md           # このファイル
@@ -100,6 +102,28 @@
    ```bash
    aws configure
    ```
+
+## GitHub Actions セットアップ
+
+このプロジェクトでは、GitHub ActionsでAWSサーバーレスアプリケーションを自動デプロイするためのCI/CDパイプラインが構築されています。
+
+**初回セットアップ時に必要な作業**:
+
+### AWS認証設定
+GitHub ActionsでAWSリソースにアクセスするため、OIDC認証の設定が必要です。
+
+📖 **詳細手順**: [GitHub Actions AWS認証設定手順](./docs/github-actions-setup.md)
+
+**設定概要**:
+1. **AWS側**: OIDCプロバイダー、IAMポリシー、IAMロールの作成
+2. **GitHub側**: Repository Secretsの設定
+3. **設定確認**: デプロイテストの実行
+
+> ⚠️ **重要**: 初回デプロイ前に上記の認証設定を完了する必要があります。設定なしでGitHub Actionsを実行すると認証エラーで失敗します。
+
+### CI/CDワークフロー
+- **バックエンド**: `.github/workflows/backend.yml` - Rust Lambda関数のビルド・テスト・デプロイ
+- **フロントエンド**: `.github/workflows/frontend.yml` - React アプリのビルド・テスト・S3デプロイ（将来実装予定）
 
 ## ローカル開発・テスト
 
