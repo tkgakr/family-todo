@@ -17,3 +17,7 @@
 
 # キャッシュ
 .cache/
+
+# samples と tmp ディレクトリ
+samples/
+tmp/
