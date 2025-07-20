@@ -1,77 +1,28 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 家族用 ToDo 共有アプリ - サーバーレスインフラストラクチャ
-
-# グローバルパラメータ
-Parameters:
-  RetentionInDays:
-    Type: Number
-    Default: '365'
-    Description: CloudWatch Logsの保持期間（日数）
-  
-  Environment:
-    Type: String
-    Default: 'dev'
-    AllowedValues: ['dev', 'staging', 'prod']
-    Description: デプロイ環境
 
 Globals:
   Function:
-    Timeout: 30
-    MemorySize: 256
-    Architectures:
-      - x86_64
+    MemorySize: 128
+    Architectures: ["x86_64"]
+    Handler: bootstrap
+    Runtime: provided.al2023
+    Timeout: 5
     Tracing: Active
-    LoggingConfig:
-      LogFormat: JSON
     Environment:
       Variables:
         RUST_LOG: info
-        ENVIRONMENT: !Ref Environment
 
 Resources:
-  # ===== 将来追加予定のリソース =====
-  # DynamoDB Tables (イベントストア、プロジェクション)
-  # - EventStoreTable: イベントソーシング用テーブル
-  # - ProjectionTable: 読み取り最適化されたテーブル
-  # DynamoDB Streams
-  # Amazon Cognito (認証)
-  # S3 + CloudFront (フロントエンド配信)
-  # 追加のLambda関数
-  # - TodoCommandHandler: 書き込み操作
-  # - TodoEventProcessor: イベント処理
-  # - TodoQueryHandler: 読み取り操作
-
-  # ===== 現在のリソース =====
-  # IAM ロール
-  TodoLambdaRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: todo-lambda-role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-
-  # ===== Lambda 関数 =====
-  todoHandler:
+  TodoHandler:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: todo-handler
       PackageType: Image
       ImageUri: todo-handler:latest
-      Description: ToDo アプリケーションのメインハンドラー
-      Role: !GetAtt TodoLambdaRole.Arn
       Events:
-        ApiEvent:
+        Api:
           Type: HttpApi
           Properties:
-            ApiId: !Ref todoApi
             Path: /{proxy+}
             Method: ANY
     Metadata:
@@ -79,38 +30,8 @@ Resources:
       DockerContext: ../backend/
       Dockerfile: Dockerfile
 
-  # ===== API Gateway =====
-  todoApi:
-    Type: AWS::Serverless::HttpApi
-    Properties:
-      StageName: api
-      CorsConfiguration:
-        AllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - PATCH
-          - OPTIONS
-        AllowHeaders:
-          - Content-Type
-          - Authorization
-          - X-Amz-Date
-          - X-Api-Key
-          - X-Amz-Security-Token
-        AllowOrigins:
-          - '*'
-        MaxAge: 600
-
-  # ===== CloudWatch Logs =====
-  todoLogs:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub /aws/lambda/${todoHandler}
-      RetentionInDays: !Ref RetentionInDays
-
 
 Outputs:
-  ApiEndpoint:
-    Description: "API Gateway エンドポイント URL"
-    Value: !Sub https://${todoApi}.execute-api.${AWS::Region}.amazonaws.com/api/
+  ApiUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
