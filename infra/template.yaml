@@ -64,8 +64,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: todo-handler
-      CodeUri: ../backend/
-      Handler: bootstrap
+      PackageType: Image
+      ImageUri: todo-handler:latest
       Description: ToDo アプリケーションのメインハンドラー
       Role: !GetAtt TodoLambdaRole.Arn
       Events:
@@ -77,9 +77,10 @@ Resources:
             Method: ANY
             Auth:
               Authorizer: NONE
-    # ビルドにはcargo-lambdaを指定
     Metadata:
-      BuildMethod: rust-cargolambda
+      DockerTag: latest
+      DockerContext: ../backend/
+      Dockerfile: Dockerfile
 
   # ===== API Gateway =====
   todoApi:

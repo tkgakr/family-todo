@@ -30,8 +30,8 @@ cd backend && cargo test --test api_integration_tests
 
 ### インフラストラクチャ（AWS SAM）
 ```bash
-# SAMテンプレートビルド（Rustベータ機能有効）
-cd infra && sam build --beta-features
+# SAMテンプレートビルド（Dockerイメージ、ベータ機能不使用）
+cd infra && sam build
 
 # AWSへデプロイ
 cd infra && sam deploy
@@ -65,7 +65,12 @@ cd infra && sam local invoke todoHandler -e events/event.json
 - `lambda_http`: LambdaでのHTTP処理
 - `serde`/`serde_json`: JSONシリアライゼーション
 - `tokio`: 非同期ランタイム
-- 予定: `ulid`, `aws-sdk-dynamodb`, `chrono`
+- `ulid`, `aws-sdk-dynamodb`, `chrono`
+
+### デプロイメント
+- **方式**: DockerコンテナイメージによるLambdaデプロイ
+- **利点**: ベータ機能に依存せず、環境一貫性を保証
+- **ビルド**: SAMがDockerfileを使用してイメージをビルド・デプロイ
 
 ## ファイル構造
 ```
@@ -73,9 +78,12 @@ cd infra && sam local invoke todoHandler -e events/event.json
 ├── backend/           # Rust Lambda関数
 │   ├── src/
 │   │   ├── main.rs           # Lambdaエントリーポイント
-│   │   └── http_handler.rs   # HTTPリクエスト処理
+│   │   ├── lib.rs            # ULID実装
+│   │   ├── http_handler.rs   # HTTPリクエスト処理
+│   │   └── domain.rs         # ドメインモデル
 │   ├── tests/
 │   │   └── api_integration_tests.rs
+│   ├── Dockerfile            # Lambdaコンテナイメージ定義
 │   └── Cargo.toml
 ├── infra/             # AWS SAMインフラストラクチャ
 │   ├── template.yaml         # SAMリソース定義
@@ -108,8 +116,8 @@ cd infra && sam local invoke todoHandler -e events/event.json
 
 ## 開発ワークフロー
 
-1. バックエンド変更: `cargo test`でテスト後、`sam build --beta-features`と`sam local start-api`実行
-2. インフラストラクチャ変更: `template.yaml`更新後、`sam build --beta-features && sam deploy`実行
+1. バックエンド変更: `cargo test`でテスト後、`sam build`と`sam local start-api`実行
+2. インフラストラクチャ変更: `template.yaml`更新後、`sam build && sam deploy`実行
 3. ローカル開発: APIテスト用に`sam local start-api`使用
 4. 現在のLambdaは任意のHTTPリクエストに対してシンプルな挨拶メッセージで応答
 

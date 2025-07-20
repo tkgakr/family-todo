@@ -335,27 +335,83 @@ git push origin main
 - [ ] GitHubユーザー名が正しく設定されているか
 - [ ] IAMロールの信頼関係が正しく設定されているか
 - [ ] GitHub Secretsの値が正しく設定されているか
-- [ ] SAMビルドでベータ機能フラグが設定されているか（Rust使用時）
+- [ ] Dockerfileが正しく配置されているか（backend/Dockerfile）
+- [ ] SAMテンプレートでPackageType: Imageが設定されているか（Rust使用時）
+- [ ] ベータ機能に依存していないか
 
 #### よくあるエラーと解決方法
 
-**SAM Build エラー: "rust-cargolambda" is a beta feature**
-```
-Build method "rust-cargolambda" is a beta feature.
-Please confirm if you would like to proceed
+**最終解決方法: Dockerコンテナイメージによるベータ機能完全回避**
+
+**SAM Build エラー: "rust-cargolambda" is a beta feature**の完全な解決策：
+
+**1. backend/Dockerfile の作成**:
+```dockerfile
+# AWS Lambda Rust Runtime for ARM64
+FROM public.ecr.aws/lambda/provided:al2023-arm64
+
+# Install development tools
+RUN dnf update -y && \
+    dnf install -y gcc gcc-c++ make && \
+    dnf clean all
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Add ARM64 target for cross compilation
+RUN rustup target add aarch64-unknown-linux-gnu
+
+# Set working directory
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# Copy source code
+COPY Cargo.toml Cargo.lock ./
+COPY src/ ./src/
+
+# Build the application
+RUN cargo build --release --target aarch64-unknown-linux-gnu
+
+# Copy the binary to the runtime directory as bootstrap
+RUN cp target/aarch64-unknown-linux-gnu/release/backend ${LAMBDA_RUNTIME_DIR}/bootstrap
+
+# Set the CMD to your handler
+CMD ["bootstrap"]
 ```
 
-**解決方法**: GitHub Actionsワークフローの`sam build`コマンドに`--beta-features`フラグを追加
+**2. SAMテンプレート設定**:
 ```yaml
-- name: SAM Build
+todoHandler:
+  Type: AWS::Serverless::Function
+  Properties:
+    PackageType: Image
+    ImageUri: todo-handler:latest
+  Metadata:
+    DockerTag: latest
+    DockerContext: ../backend/
+    Dockerfile: Dockerfile
+```
+
+**3. GitHub Actions ワークフロー**:
+```yaml
+- name: SAM Build (Docker Image, no beta features)
   run: |
     cd infra
-    sam build --use-container --beta-features
+    sam build
 ```
 
-**理由**: RustでのLambda関数ビルドはSAM CLIでベータ機能として提供されているため、明示的に有効化が必要
+**利点**:
+- **ベータ機能完全回避**: rust-cargolambdaを使用しない
+- **環境一貫性**: Dockerによる完全な環境制御
+- **プロダクション対応**: AWS公式サポートのコンテナイメージ方式
+- **再現性**: Dockerfileによる完全な環境定義
+- **クロスプラットフォーム**: Linux/macOS/Windowsで同一の出力
 
-**ローカル開発時の注意**: ローカルでも同様に`sam build --beta-features`または`sam build --use-container --beta-features`を使用する必要があります。
+**ローカル開発時**: 
+```bash
+cd infra && sam build
+sam local start-api
+```
 
 📖 **参考**: 
 - [GitHub Actions でのトラブルシューティング](https://docs.github.com/ja/actions/monitoring-and-troubleshooting-workflows/troubleshooting-workflows)
