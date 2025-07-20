@@ -21,7 +21,6 @@ Globals:
     MemorySize: 256
     Architectures:
       - x86_64
-    Runtime: provided.al2023
     Tracing: Active
     LoggingConfig:
       LogFormat: JSON
@@ -75,8 +74,6 @@ Resources:
             ApiId: !Ref todoApi
             Path: /{proxy+}
             Method: ANY
-            Auth:
-              Authorizer: NONE
     Metadata:
       DockerTag: latest
       DockerContext: ../backend/
