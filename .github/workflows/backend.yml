@@ -47,5 +47,5 @@ jobs:
       - name: SAM Deploy
         run: |
           cd infra
-          sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --resolve-image-repos --resolve-s3
+          sam deploy --stack-name family-todo-app --no-confirm-changeset --no-fail-on-empty-changeset --resolve-image-repos --resolve-s3
         if: github.ref == 'refs/heads/main'
