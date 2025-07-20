@@ -20,7 +20,7 @@ Globals:
     Timeout: 30
     MemorySize: 256
     Architectures:
-      - arm64
+      - x86_64
     Runtime: provided.al2023
     Tracing: Active
     LoggingConfig:

@@ -22,7 +22,7 @@ jobs:
       
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-unknown-linux-musl
+          targets: x86_64-unknown-linux-gnu
 
       - name: Build and Test
         run: |
