@@ -14,9 +14,9 @@
 - ✅ フロントエンド基盤構築（React + TypeScript + Biome）
 
 ### 現在の実装状況
-- **バックエンド**: シンプルなHTTPハンドラーのみ（挨拶メッセージ返却）
+- **バックエンド**: ULID実装とドメインモデル定義完了（タスク1完了）
 - **インフラ**: Lambda + API Gateway の基本構成のみ
-- **依存関係**: 基本的なHTTP処理ライブラリのみ
+- **依存関係**: ULID、DynamoDB SDK、chrono追加済み
 
 ## 🎯 マイルストーン1の目標
 
@@ -47,20 +47,19 @@
 ドメインモデルはエヴァンスのDDDに従い、各フィールドを値オブジェクトで型定義する。(ニュータイプイディオム)
 
 #### 作業内容
-1. **Cargo.toml更新**
-   - `ulid = "1.1"`
-   - `aws-sdk-dynamodb = "1.0"`
-   - `chrono = { version = "0.4", features = ["serde"] }`
+1. **Cargo.toml更新** ✅ **完了**
+   - `ulid = "1.1"` - ULID生成ライブラリ
+   - `aws-sdk-dynamodb = "1.0"` - DynamDB操作SDK
+   - `chrono = { version = "0.4", features = ["serde"] }` - 日時処理
 
-2. **ULID実装** (`backend/src/lib.rs` 新規作成)
-   ```rust
-   // TodoId構造体の実装
-   // ULID生成・変換・タイムスタンプ抽出機能
-   ```
+2. **ULID実装** (`backend/src/lib.rs` 新規作成) ✅ **完了**
+   - TodoId構造体の実装（26文字Base32形式）
+   - ULID生成・変換・タイムスタンプ抽出機能
+   - シリアライズ/デシリアライズ対応
 
-3. **ドメインモデル定義** (`backend/src/domain/` 新規作成)
-   - `Todo`構造体
-   - `TodoEvent`構造体（Create/Update/Complete/Delete）
+3. **ドメインモデル定義** (`backend/src/domain.rs` 新規作成) ✅ **完了**
+   - `Todo`構造体 - ULID ID、タイトル、説明、完了状態、作成・更新情報
+   - `TodoEvent`構造体（Create/Update/Complete/Delete） - イベントソーシング用
 
 ### タスク2: DynamoDB設計と実装
 
@@ -206,7 +205,13 @@ cd infra && sam local start-api
 承認を得るごとにGitコミットする
 
 ### 完了チェックリスト
-- [ ] タスク1: 依存関係追加とULID実装
+- [x] タスク1: 依存関係追加とULID実装 ✅ **完了 (2025-07-20)**
+  - [x] Cargo.toml依存関係追加（ulid, aws-sdk-dynamodb, chrono）
+  - [x] TodoId構造体実装（26文字Base32 ULID）
+  - [x] ドメインモデル定義（Todo, TodoEvent）
+  - [x] AAAパターンテスト実装
+  - [x] 全テスト9件パス、Clippyリンター警告なし
+  - [x] SAM統合テスト正常動作確認
 - [ ] タスク2: DynamoDB設計と実装
 - [ ] タスク3a: Repository実装
 - [ ] タスク3b: CommandHandler実装
@@ -232,4 +237,10 @@ cd infra && sam local start-api
 
 ---
 
-**🚀 次のアクション**: タスク1から順次実装開始
+**🚀 次のアクション**: タスク2（DynamoDB設計と実装）の開始
+
+**📝 タスク1完了メモ（2025-07-20）:**
+- TDDアプローチでRed-Green-Refactorサイクルを適用
+- AAAパターン（Arrange-Act-Assert）でテスト構造化
+- モダンなRustモジュール分割方式を採用（mod.rsを使用せず）
+- コミット: `3f81a67` - "feat: タスク1完了 - ULID実装とドメインモデル定義"
