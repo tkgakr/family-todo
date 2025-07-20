@@ -104,6 +104,7 @@ cd infra && sam local invoke todoHandler -e events/event.json
 - `backend/src/`モジュール内のユニットテスト（`#[cfg(test)]`付き）
 - `backend/tests/`内の統合テスト
 - `infra/events/`のイベントファイルを使用したローカルSAMテスト
+- **テスト実装方針**: AAAパターン（Arrange-Act-Assert）に従い、テストの構造を明確化
 
 ## 開発ワークフロー
 
