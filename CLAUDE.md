@@ -30,8 +30,8 @@ cd backend && cargo test --test api_integration_tests
 
 ### インフラストラクチャ（AWS SAM）
 ```bash
-# SAMテンプレートビルド
-cd infra && sam build
+# SAMテンプレートビルド（Rustベータ機能有効）
+cd infra && sam build --beta-features
 
 # AWSへデプロイ
 cd infra && sam deploy
@@ -108,8 +108,8 @@ cd infra && sam local invoke todoHandler -e events/event.json
 
 ## 開発ワークフロー
 
-1. バックエンド変更: `cargo test`でテスト後、`sam build`と`sam local start-api`実行
-2. インフラストラクチャ変更: `template.yaml`更新後、`sam build && sam deploy`実行
+1. バックエンド変更: `cargo test`でテスト後、`sam build --beta-features`と`sam local start-api`実行
+2. インフラストラクチャ変更: `template.yaml`更新後、`sam build --beta-features && sam deploy`実行
 3. ローカル開発: APIテスト用に`sam local start-api`使用
 4. 現在のLambdaは任意のHTTPリクエストに対してシンプルな挨拶メッセージで応答
 

@@ -33,7 +33,7 @@ jobs:
       - name: SAM Build
         run: |
           cd infra
-          sam build --use-container
+          sam build --use-container --beta-features
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:

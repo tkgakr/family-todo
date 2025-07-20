@@ -335,8 +335,31 @@ git push origin main
 - [ ] GitHubユーザー名が正しく設定されているか
 - [ ] IAMロールの信頼関係が正しく設定されているか
 - [ ] GitHub Secretsの値が正しく設定されているか
+- [ ] SAMビルドでベータ機能フラグが設定されているか（Rust使用時）
 
-📖 **参考**: [GitHub Actions でのトラブルシューティング](https://docs.github.com/ja/actions/monitoring-and-troubleshooting-workflows/troubleshooting-workflows)
+#### よくあるエラーと解決方法
+
+**SAM Build エラー: "rust-cargolambda" is a beta feature**
+```
+Build method "rust-cargolambda" is a beta feature.
+Please confirm if you would like to proceed
+```
+
+**解決方法**: GitHub Actionsワークフローの`sam build`コマンドに`--beta-features`フラグを追加
+```yaml
+- name: SAM Build
+  run: |
+    cd infra
+    sam build --use-container --beta-features
+```
+
+**理由**: RustでのLambda関数ビルドはSAM CLIでベータ機能として提供されているため、明示的に有効化が必要
+
+**ローカル開発時の注意**: ローカルでも同様に`sam build --beta-features`または`sam build --use-container --beta-features`を使用する必要があります。
+
+📖 **参考**: 
+- [GitHub Actions でのトラブルシューティング](https://docs.github.com/ja/actions/monitoring-and-troubleshooting-workflows/troubleshooting-workflows)
+- [AWS SAM CLI Rust サポート](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/building-rust.html)
 
 ---
 
