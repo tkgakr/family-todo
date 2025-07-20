@@ -17,8 +17,7 @@ Resources:
   TodoHandler:
     Type: AWS::Serverless::Function
     Properties:
-      PackageType: Image
-      ImageUri: todo-handler:latest
+      CodeUri: ../backend/target/lambda/todo-handler/
       Events:
         Api:
           Type: HttpApi
@@ -26,9 +25,7 @@ Resources:
             Path: /{proxy+}
             Method: ANY
     Metadata:
-      DockerTag: latest
-      DockerContext: ../backend/
-      Dockerfile: Dockerfile
+      BuildMethod: makefile
 
 
 Outputs:

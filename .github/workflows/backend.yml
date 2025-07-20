@@ -27,13 +27,21 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
 
+      - name: Install cargo-lambda
+        run: cargo install cargo-lambda
+
       - name: Build and Test
         run: |
           cd backend
           cargo test --all
           cargo clippy -- -D warnings
 
-      - name: SAM Build (Docker Image, no beta features)
+      - name: Build Lambda with cargo-lambda
+        run: |
+          cd backend
+          cargo lambda build --release --target x86_64-unknown-linux-gnu
+
+      - name: SAM Build
         run: |
           cd infra
           sam build
@@ -47,5 +55,5 @@ jobs:
       - name: SAM Deploy
         run: |
           cd infra
-          sam deploy --no-fail-on-empty-changeset
+          sam deploy --no-fail-on-empty-changeset --resolve-s3
         if: github.ref == 'refs/heads/main'
