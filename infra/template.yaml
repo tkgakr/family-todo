@@ -4,7 +4,7 @@ Transform: AWS::Serverless-2016-10-31
 Globals:
   Function:
     MemorySize: 128
-    Architectures: ["x86_64"]
+    Architectures: ["arm64"]
     Handler: bootstrap
     Runtime: provided.al2023
     Timeout: 5
@@ -24,6 +24,8 @@ Resources:
           Properties:
             Path: /{proxy+}
             Method: ANY
+    Metadata:
+      BuildMethod: copy
 
 
 Outputs:
