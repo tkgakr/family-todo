@@ -17,15 +17,13 @@ Resources:
   TodoHandler:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../backend/target/lambda/todo-handler/
+      CodeUri: ../backend/target/lambda/main/
       Events:
         Api:
           Type: HttpApi
           Properties:
             Path: /{proxy+}
             Method: ANY
-    Metadata:
-      BuildMethod: makefile
 
 
 Outputs:
