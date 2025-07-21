@@ -39,7 +39,7 @@ jobs:
       - name: Build Lambda with cargo-lambda
         run: |
           cd backend
-          cargo lambda build --release --target x86_64-unknown-linux-gnu
+          cargo lambda build --release
 
       - name: SAM Build
         run: |
