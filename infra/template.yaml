@@ -25,7 +25,7 @@ Resources:
             Path: /{proxy+}
             Method: ANY
     Metadata:
-      BuildMethod: copy
+      BuildMethod: makefile
 
 
 Outputs:
