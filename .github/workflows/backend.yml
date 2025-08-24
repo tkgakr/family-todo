@@ -2,7 +2,6 @@ name: Deploy Backend
 
 on:
   push:
-    branches: [main]
     paths:
       - "backend/**"
       - "infra/**"
@@ -16,22 +15,16 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      
-      - uses: aws-actions/setup-sam@v2
-      
-      - name: Install Rust toolchain with Cargo Lambda
-        uses: moonrepo/setup-rust@v1
-        with:
-          bins: cargo-lambda
 
-      - name: Install Zig toolchain
-        uses: mlugg/setup-zig@v1
+      - uses: aws-actions/setup-sam@v2
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          version: 0.14.0
+          targets: x86_64-unknown-linux-gnu
 
       - name: Build and Test
         run: |
@@ -39,25 +32,10 @@ jobs:
           cargo test --all
           cargo clippy -- -D warnings
 
-      - name: Build Lambda with cargo-lambda
-        run: |
-          cd backend
-          cargo lambda build --release --target x86_64-unknown-linux-gnu
-
-      - name: Create Makefile for SAM
-        run: |
-          mkdir -p backend/target/lambda/main
-          cat > backend/target/lambda/main/Makefile << 'EOF'
-          .PHONY: build-TodoHandler
-          build-TodoHandler:
-          	@echo "Using pre-built bootstrap from cargo-lambda"
-          	@if [ ! -f bootstrap ]; then echo "Error: bootstrap not found"; exit 1; fi
-          EOF
-
-      - name: SAM Build
+      - name: SAM Build (Docker Image, no beta features)
         run: |
           cd infra
-          sam build --skip-pull-image
+          sam build
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
