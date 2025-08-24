@@ -23,8 +23,9 @@ jobs:
       - uses: aws-actions/setup-sam@v2
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
+
+      - name: Install cargo-lambda
+        run: cargo install cargo-lambda
 
       - name: Build and Test
         run: |
@@ -32,7 +33,7 @@ jobs:
           cargo test --all
           cargo clippy -- -D warnings
 
-      - name: SAM Build (Docker Image, no beta features)
+      - name: SAM Build (using cargo-lambda)
         run: |
           cd infra
           sam build

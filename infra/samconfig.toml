@@ -10,6 +10,7 @@ stack_name = "family-todo-backend"
 [default.build.parameters]
 cached = true
 parallel = true
+beta_features = true
 
 [default.deploy.parameters]
 capabilities = "CAPABILITY_IAM"

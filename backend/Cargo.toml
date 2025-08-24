@@ -3,6 +3,10 @@ name = "backend"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "bootstrap"
+path = "src/main.rs"
+
 [dependencies]
 lambda_http = "0.15.1"
 http = "1.0.0"
