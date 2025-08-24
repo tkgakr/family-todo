@@ -46,5 +46,5 @@ jobs:
       - name: SAM Deploy
         run: |
           cd infra
-          sam deploy --no-fail-on-empty-changeset --resolve-s3
+          sam deploy --no-fail-on-empty-changeset --resolve-s3 --resolve-image-repos
         if: github.ref == 'refs/heads/main'
