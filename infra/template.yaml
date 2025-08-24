@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 
 Globals:
@@ -17,7 +17,8 @@ Resources:
   TodoHandler:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../backend/target/lambda/main/
+      PackageType: Image
+      ImageUri: todo-handler:latest
       Events:
         Api:
           Type: HttpApi
@@ -25,8 +26,9 @@ Resources:
             Path: /{proxy+}
             Method: ANY
     Metadata:
-      BuildMethod: makefile
-
+      DockerTag: latest
+      DockerContext: ../backend/
+      Dockerfile: Dockerfile
 
 Outputs:
   ApiUrl:
