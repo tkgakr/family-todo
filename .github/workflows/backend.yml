@@ -43,8 +43,20 @@ jobs:
           aws-region: ap-northeast-1
         if: github.ref == 'refs/heads/main'
 
+      - name: Delete failed stack if exists
+        run: |
+          cd infra
+          aws cloudformation describe-stacks --stack-name family-todo-backend --region ap-northeast-1 --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -E "(ROLLBACK_COMPLETE|CREATE_FAILED|UPDATE_ROLLBACK_COMPLETE)" && aws cloudformation delete-stack --stack-name family-todo-backend --region ap-northeast-1 && aws cloudformation wait stack-delete-complete --stack-name family-todo-backend --region ap-northeast-1 || true
+        if: github.ref == 'refs/heads/main'
+
       - name: SAM Deploy
         run: |
           cd infra
-          sam deploy --no-fail-on-empty-changeset --resolve-s3 --resolve-image-repos
+          sam deploy --debug
         if: github.ref == 'refs/heads/main'
+
+      - name: Show CloudFormation Events on Failure
+        if: failure() && github.ref == 'refs/heads/main'
+        run: |
+          cd infra
+          aws cloudformation describe-stack-events --stack-name family-todo-backend --region ap-northeast-1 --query 'StackEvents[?ResourceStatus==`CREATE_FAILED` || ResourceStatus==`UPDATE_FAILED`].[LogicalResourceId,ResourceStatus,ResourceStatusReason]' --output table || true
