@@ -10,7 +10,7 @@ Parameters:
 
   FamilyTodoTableName:
     Type: String
-    Default: !Sub "family-todo-${Environment}"
+    Default: "family-todo-dev"
 
 Globals:
   Function:
@@ -31,7 +31,7 @@ Resources:
   FamilyTodoTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Ref FamilyTodoTableName
+      TableName: !Sub "family-todo-${Environment}"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
@@ -144,7 +144,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "family-todo-command-handler-${Environment}"
-      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      CodeUri: target/lambda/command-handler/
       Handler: bootstrap
       Events:
         ApiEvent:
@@ -168,7 +168,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "family-todo-query-handler-${Environment}"
-      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      CodeUri: target/lambda/query-handler/
       Handler: bootstrap
       Events:
         ApiEvent:
@@ -192,7 +192,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "family-todo-event-processor-${Environment}"
-      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      CodeUri: target/lambda/event-processor/
       Handler: bootstrap
       Events:
         DynamoDBStream:
@@ -230,7 +230,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "family-todo-snapshot-manager-${Environment}"
-      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      CodeUri: target/lambda/snapshot-manager/
       Handler: bootstrap
       Events:
         ScheduleEvent:
@@ -286,6 +286,169 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/family-todo-snapshot-manager-${Environment}"
       RetentionInDays: 14
 
+  # CloudWatch Alarms for Monitoring
+  ApiGateway4xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-api-4xx-errors-${Environment}"
+      AlarmDescription: "API Gateway 4xx errors"
+      MetricName: 4XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub "family-todo-api-${Environment}"
+      TreatMissingData: notBreaching
+
+  ApiGateway5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-api-5xx-errors-${Environment}"
+      AlarmDescription: "API Gateway 5xx errors"
+      MetricName: 5XXError
+      Namespace: AWS/ApiGateway
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub "family-todo-api-${Environment}"
+      TreatMissingData: notBreaching
+
+  ApiGatewayLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-api-latency-${Environment}"
+      AlarmDescription: "API Gateway high latency"
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub "family-todo-api-${Environment}"
+      TreatMissingData: notBreaching
+
+  DynamoDBThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-dynamodb-throttles-${Environment}"
+      AlarmDescription: "DynamoDB throttling events"
+      MetricName: ThrottledRequests
+      Namespace: AWS/DynamoDB
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref FamilyTodoTable
+      TreatMissingData: notBreaching
+
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-lambda-errors-${Environment}"
+      AlarmDescription: "Lambda function errors"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  # CloudWatch Dashboard
+  FamilyTodoDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "FamilyTodo-${Environment}"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", "ApiName", "family-todo-api-${Environment}" ],
+                  [ ".", "4XXError", ".", "." ],
+                  [ ".", "5XXError", ".", "." ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "API Gateway Requests"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Latency", "ApiName", "family-todo-api-${Environment}" ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "API Gateway Latency"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "family-todo-command-handler-${Environment}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ ".", "Duration", ".", "." ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Lambda Metrics"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedReadCapacityUnits", "TableName", "${FamilyTodoTable}" ],
+                  [ ".", "ConsumedWriteCapacityUnits", ".", "." ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Capacity"
+              }
+            }
+          ]
+        }
+
 Outputs:
   ApiGatewayUrl:
     Description: API Gateway endpoint URL
@@ -310,3 +473,21 @@ Outputs:
     Value: !Ref FamilyTodoTable
     Export:
       Name: !Sub "${AWS::StackName}-TableName"
+
+  DynamoDBTableArn:
+    Description: DynamoDB Table ARN
+    Value: !GetAtt FamilyTodoTable.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-TableArn"
+
+  EventProcessorDLQUrl:
+    Description: Event Processor Dead Letter Queue URL
+    Value: !Ref EventProcessorDLQ
+    Export:
+      Name: !Sub "${AWS::StackName}-DLQUrl"
+
+  CloudWatchDashboardUrl:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=FamilyTodo-${Environment}"
+    Export:
+      Name: !Sub "${AWS::StackName}-DashboardUrl"

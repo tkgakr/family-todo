@@ -13,6 +13,6 @@ async fn function_handler(_event: LambdaEvent<Value>) -> Result<Value, Error> {
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     init_tracing();
-    
+
     run(service_fn(function_handler)).await
 }

@@ -1,7 +1,7 @@
+pub mod auth;
 pub mod config;
 pub mod tracing;
-pub mod auth;
 
+pub use auth::*;
 pub use config::*;
 pub use tracing::*;
-pub use auth::*;

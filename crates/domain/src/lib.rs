@@ -1,7 +1,7 @@
-pub mod todo;
-pub mod events;
 pub mod errors;
+pub mod events;
+pub mod todo;
 
-pub use todo::*;
-pub use events::*;
 pub use errors::*;
+pub use events::*;
+pub use todo::*;

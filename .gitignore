@@ -51,3 +51,28 @@ aws-exports.js
 # Temporary files
 *.tmp
 *.temp
+
+# Docker
+docker/dynamodb/
+.docker/
+
+# Testing
+coverage/
+.nyc_output/
+junit.xml
+
+# Build artifacts
+*.zip
+bootstrap
+*.so
+*.dylib
+*.dll
+
+# SAM
+.aws-sam/build.toml
+.aws-sam/cache/
+.aws-sam/deps/
+
+# Local development
+local-env.json.bak
+samconfig.*.toml

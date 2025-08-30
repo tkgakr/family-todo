@@ -8,7 +8,7 @@ function App() {
         <p>アプリケーションの基盤が構築されました。</p>
       </main>
     </div>
-  );
+  )
 }
 
-export default App;
+export default App

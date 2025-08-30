@@ -1,6 +1,6 @@
 # 家族用 ToDo アプリ - AWS サーバーレス版
 
-イベントソーシング + CQRS アーキテクチャを採用したサーバーレス家族用 ToDo アプリです。
+イベントソーシング + CQRS アーキテクチャを採用したサーバーレス家族用 ToDo アプリです。Rust + React/TypeScript で構築され、AWS サーバーレスインフラストラクチャにデプロイされます。
 
 ## アーキテクチャ
 
@@ -22,53 +22,91 @@
 - SAM CLI
 - cargo-lambda
 
-### バックエンド開発
+### クイックスタート
 
 ```bash
-# 依存関係のインストール
-cargo build
+# cargo-lambda のインストール
+cargo install cargo-lambda
 
-# テスト実行
-cargo test
+# プロジェクト依存関係のインストール
+make install-deps
 
-# Lambda関数のビルド
-cargo lambda build --release
+# ローカル開発環境の起動（DynamoDB Local含む）
+make local-dev
 
-# ローカルでのAPI起動
-sam local start-api
+# 別ターミナルでAPIサーバー起動
+make sam-local
+
+# 別ターミナルでフロントエンド起動
+make frontend-dev
 ```
 
-### フロントエンド開発
+### 開発用 URL
+
+- **フロントエンド**: http://localhost:3000
+- **API Gateway**: http://localhost:8080
+- **DynamoDB Local**: http://localhost:8000
+- **DynamoDB Admin**: http://localhost:8001
+
+### 主要な開発コマンド
 
 ```bash
-cd frontend
+# ビルドとテスト
+make build                     # 全Rustクレートのビルド
+make test                      # 全テストの実行
+make lint                      # リンティング実行
+make format                    # コードフォーマット
 
-# 依存関係のインストール
-npm install
+# ローカル開発
+make local-dev                 # ローカルサービス起動
+make sam-local                 # ローカルAPI起動
+make frontend-dev              # フロントエンド開発サーバー起動
 
-# 開発サーバー起動
-npm run dev
+# デプロイ
+make deploy-dev                # 開発環境へのデプロイ
+make deploy-prod               # 本番環境へのデプロイ
 
-# テスト実行
-npm run test
-
-# ビルド
-npm run build
+# ユーティリティ
+make logs-dev                  # 開発環境ログの確認
+make validate-template         # SAMテンプレートの検証
+make clean                     # ビルド成果物のクリーンアップ
 ```
 
-## デプロイ
+## インフラストラクチャ
 
-### 開発環境
+### AWS リソース
 
-```bash
-sam deploy --config-env default
-```
+- **API Gateway**: Cognito JWT 認証付き HTTP API
+- **Lambda 関数**: Rust ベースのサーバーレス関数
+- **DynamoDB**: GSI 付きシングルテーブル設計
+- **Cognito**: Passkey 対応ユーザー認証
+- **CloudWatch**: ログ、メトリクス、アラーム
+- **X-Ray**: 分散トレーシング
+- **SQS**: 失敗イベント用デッドレターキュー
 
-### 本番環境
+### 監視とアラーム
 
-```bash
-sam deploy --config-env production
-```
+包括的な監視機能を含みます：
+
+- API Gateway 4xx/5xx エラーとレイテンシ
+- Lambda 関数エラーと実行時間
+- DynamoDB スロットリングと容量メトリクス
+- カスタム CloudWatch ダッシュボード
+
+## デプロイメント
+
+### 環境
+
+- **開発環境**: `develop` ブランチから自動デプロイ
+- **本番環境**: `main` ブランチから自動デプロイ
+
+### CI/CD パイプライン
+
+1. **コード品質**: フォーマット、リンティング、セキュリティスキャン
+2. **テスト**: ユニット、統合、フロントエンドテスト
+3. **ビルド**: Lambda 関数とフロントエンドアセット
+4. **デプロイ**: SAM ベースのインフラストラクチャデプロイ
+5. **スモークテスト**: 基本的なヘルスチェック
 
 ## プロジェクト構造
 
@@ -87,21 +125,68 @@ sam deploy --config-env production
 └── docs/                 # ドキュメント
 ```
 
-## 機能
+## イベントソーシング設計
 
-- [ ] ToDo の作成・編集・完了・削除
-- [ ] 家族メンバー管理
-- [ ] Passkey 認証
-- [ ] リアルタイム同期
-- [ ] 履歴管理（イベントソーシング）
-- [ ] GDPR 対応（データ削除）
+### イベントタイプ
 
-## 開発ガイドライン
+- `TodoCreatedV2`: メタデータ付き ToDo 作成
+- `TodoUpdatedV1`: ToDo 変更
+- `TodoCompletedV1`: ToDo 完了
+- `TodoDeletedV1`: ToDo 削除（論理削除）
 
-- イベントソーシングパターンに従う
-- テスト駆動開発（TDD）を実践
-- セキュリティベストプラクティスを遵守
-- パフォーマンス要件を満たす（要件書参照）
+### データフロー
+
+1. **コマンド** → CommandHandler → イベント → DynamoDB
+2. **イベント** → DynamoDB Streams → EventProcessor → プロジェクション
+3. **クエリ** → QueryHandler → プロジェクション → レスポンス
+
+### 楽観的ロック
+
+バージョンベースの楽観的ロックと自動リトライロジックで同時変更を処理します。
+
+## セキュリティ機能
+
+- **Passkey 認証**: WebAuthn ベースのパスワードレスログイン
+- **JWT 認可**: API Gateway と Cognito の統合
+- **家族ベースアクセス制御**: マルチテナントデータ分離
+- **監査ログ**: GDPR 対応の完全なイベント履歴
+- **セキュリティスキャン**: CI/CD での自動脆弱性チェック
+
+## パフォーマンス目標
+
+- **API レスポンス時間**: <200ms (p95)
+- **DynamoDB 操作**: 書き込み<20ms、読み取り<10ms
+- **Lambda コールドスタート**: <500ms (p99)
+- **エラー率**: <0.1%
+- **可用性**: 99.9%
+
+## 設定
+
+### 環境変数
+
+`.env.example` を `.env.local` にコピーして設定：
+
+```bash
+# AWS設定
+AWS_REGION=ap-northeast-1
+AWS_PROFILE=default
+
+# アプリケーション設定
+ENVIRONMENT=dev
+LOG_LEVEL=info
+
+# フロントエンド設定
+VITE_API_URL=http://localhost:8080
+VITE_USER_POOL_ID=your-user-pool-id
+VITE_USER_POOL_CLIENT_ID=your-user-pool-client-id
+```
+
+## ドキュメント
+
+- [アーキテクチャ計画](docs/architecture/PLANNING.md)
+- [要件定義](/.kiro/specs/family-todo-serverless/requirements.md)
+- [設計書](/.kiro/specs/family-todo-serverless/design.md)
+- [実装タスク](/.kiro/specs/family-todo-serverless/tasks.md)
 
 ## ライセンス
 

@@ -92,11 +92,6 @@ jobs:
       - name: Build Lambda functions
         run: |
           cargo lambda build --release --output-format zip
-          mkdir -p target/lambda
-          cp target/lambda/command-handler/bootstrap.zip target/lambda/command-handler/
-          cp target/lambda/query-handler/bootstrap.zip target/lambda/query-handler/
-          cp target/lambda/event-processor/bootstrap.zip target/lambda/event-processor/
-          cp target/lambda/snapshot-manager/bootstrap.zip target/lambda/snapshot-manager/
 
       - name: Upload Lambda artifacts
         uses: actions/upload-artifact@v4
@@ -142,16 +137,10 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
 
-      - name: Run smoke tests
+      - name: Run health checks
         run: |
-          # Get API Gateway URL from CloudFormation outputs
-          API_URL=$(aws cloudformation describe-stacks \
-            --stack-name family-todo-dev \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiGatewayUrl`].OutputValue' \
-            --output text)
-
-          # Simple health check
-          curl -f "$API_URL/health" || echo "Health check endpoint not yet implemented"
+          chmod +x scripts/health-check.sh
+          scripts/health-check.sh dev
 
   deploy-prod:
     name: Deploy to Production
@@ -190,16 +179,10 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
 
-      - name: Run smoke tests
+      - name: Run health checks
         run: |
-          # Get API Gateway URL from CloudFormation outputs
-          API_URL=$(aws cloudformation describe-stacks \
-            --stack-name family-todo-prod \
-            --query 'Stacks[0].Outputs[?OutputKey==`ApiGatewayUrl`].OutputValue' \
-            --output text)
-
-          # Simple health check
-          curl -f "$API_URL/health" || echo "Health check endpoint not yet implemented"
+          chmod +x scripts/health-check.sh
+          scripts/health-check.sh prod
 
   security-scan:
     name: Security Scan
@@ -209,6 +192,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Run Rust security audit
         run: |
           cargo install cargo-audit
@@ -217,3 +203,40 @@ jobs:
       - name: Run frontend security audit
         working-directory: frontend
         run: npm audit --audit-level=high
+
+      - name: Run SAM template validation
+        run: |
+          pip install aws-sam-cli
+          sam validate --template template.yaml
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  infrastructure-validation:
+    name: Infrastructure Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Validate SAM template
+        run: sam validate --template template.yaml
+
+      - name: Run cfn-lint
+        run: |
+          pip install cfn-lint
+          cfn-lint template.yaml
+
+      - name: Check CloudFormation security
+        uses: stelligent/cfn_nag@master
+        with:
+          input_path: template.yaml

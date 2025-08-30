@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use crate::todo::TodoId;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
@@ -46,7 +46,7 @@ impl TodoEvent {
             TodoEvent::TodoDeletedV1 { todo_id, .. } => todo_id,
         }
     }
-    
+
     pub fn event_id(&self) -> &str {
         match self {
             TodoEvent::TodoCreatedV2 { event_id, .. } => event_id,

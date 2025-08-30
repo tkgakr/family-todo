@@ -24,8 +24,11 @@
   "javascript": {
     "formatter": {
       "quoteStyle": "single",
-      "trailingComma": "es5",
+      "trailingCommas": "es5",
       "semicolons": "asNeeded"
     }
+  },
+  "files": {
+    "ignore": ["dist/**", "node_modules/**", "*.min.js"]
   }
 }

@@ -1,5 +1,5 @@
-use domain::{TodoEvent, TodoId, TodoError};
 use crate::DynamoDbClient;
+use domain::{TodoError, TodoEvent, TodoId};
 
 pub struct EventRepository {
     #[allow(dead_code)]
@@ -10,16 +10,12 @@ impl EventRepository {
     pub fn new(db: DynamoDbClient) -> Self {
         Self { db }
     }
-    
-    pub async fn save_event(
-        &self,
-        _family_id: &str,
-        _event: TodoEvent,
-    ) -> Result<(), TodoError> {
+
+    pub async fn save_event(&self, _family_id: &str, _event: TodoEvent) -> Result<(), TodoError> {
         // Implementation placeholder for task 3.2
         Ok(())
     }
-    
+
     pub async fn get_events(
         &self,
         _family_id: &str,
@@ -39,7 +35,7 @@ impl ProjectionRepository {
     pub fn new(db: DynamoDbClient) -> Self {
         Self { db }
     }
-    
+
     // Implementation placeholder for task 3.2
 }
 
@@ -52,6 +48,6 @@ impl SnapshotRepository {
     pub fn new(db: DynamoDbClient) -> Self {
         Self { db }
     }
-    
+
     // Implementation placeholder for task 3.2
 }

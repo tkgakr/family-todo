@@ -1,0 +1,26 @@
+{
+  "CommandHandlerFunction": {
+    "RUST_LOG": "debug",
+    "ENVIRONMENT": "local",
+    "DYNAMODB_TABLE": "family-todo-local",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000"
+  },
+  "QueryHandlerFunction": {
+    "RUST_LOG": "debug",
+    "ENVIRONMENT": "local",
+    "DYNAMODB_TABLE": "family-todo-local",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000"
+  },
+  "EventProcessorFunction": {
+    "RUST_LOG": "debug",
+    "ENVIRONMENT": "local",
+    "DYNAMODB_TABLE": "family-todo-local",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000"
+  },
+  "SnapshotManagerFunction": {
+    "RUST_LOG": "debug",
+    "ENVIRONMENT": "local",
+    "DYNAMODB_TABLE": "family-todo-local",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000"
+  }
+}

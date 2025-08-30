@@ -12,10 +12,8 @@ impl Config {
         Ok(Config {
             dynamodb_table: env::var("DYNAMODB_TABLE")
                 .unwrap_or_else(|_| "family-todo-dev".to_string()),
-            environment: env::var("ENVIRONMENT")
-                .unwrap_or_else(|_| "dev".to_string()),
-            aws_region: env::var("AWS_REGION")
-                .unwrap_or_else(|_| "ap-northeast-1".to_string()),
+            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string()),
+            aws_region: env::var("AWS_REGION").unwrap_or_else(|_| "ap-northeast-1".to_string()),
         })
     }
 }
