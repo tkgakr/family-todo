@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/domain",
+    "crates/infrastructure", 
+    "crates/command-handler",
+    "crates/query-handler",
+    "crates/event-processor",
+    "crates/snapshot-manager",
+    "crates/shared"
+]
+
+[workspace.dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+ulid = { version = "1.0", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+aws-sdk-dynamodb = "1.0"
+lambda_runtime = "0.8"
+lambda_web = "0.2"
+opentelemetry = "0.20"
+opentelemetry-aws = "0.8"
+aws-config = "1.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,312 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Family Todo App - Serverless Event Sourcing Architecture
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  FamilyTodoTableName:
+    Type: String
+    Default: !Sub "family-todo-${Environment}"
+
+Globals:
+  Function:
+    Runtime: provided.al2
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        RUST_LOG: info
+        DYNAMODB_TABLE: !Ref FamilyTodoTable
+        ENVIRONMENT: !Ref Environment
+    Tracing: Active
+    Timeout: 30
+    MemorySize: 256
+
+Resources:
+  # DynamoDB Table - Single Table Design
+  FamilyTodoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref FamilyTodoTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: FamilyTodo
+
+  # Cognito User Pool
+  FamilyTodoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "family-todo-users-${Environment}"
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: false
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      MfaConfiguration: "OFF"
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
+        - Name: family_id
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+      UserPoolTags:
+        Environment: !Ref Environment
+        Application: FamilyTodo
+
+  # Cognito User Pool Client
+  FamilyTodoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "family-todo-client-${Environment}"
+      UserPoolId: !Ref FamilyTodoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - http://localhost:3000/callback
+      LogoutURLs:
+        - http://localhost:3000/logout
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+
+  # API Gateway
+  FamilyTodoApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "family-todo-api-${Environment}"
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt FamilyTodoUserPool.Arn
+
+  # Lambda Functions
+  CommandHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-command-handler-${Environment}"
+      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      Handler: bootstrap
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FamilyTodoApi
+            Path: /commands/{proxy+}
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FamilyTodoTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
+
+  QueryHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-query-handler-${Environment}"
+      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      Handler: bootstrap
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FamilyTodoApi
+            Path: /queries/{proxy+}
+            Method: ANY
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref FamilyTodoTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
+
+  EventProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-event-processor-${Environment}"
+      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      Handler: bootstrap
+      Events:
+        DynamoDBStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt FamilyTodoTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+            ParallelizationFactor: 2
+            MaximumRetryAttempts: 3
+            BisectBatchOnFunctionError: true
+            MaximumRecordAgeInSeconds: 300
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt EventProcessorDLQ.Arn
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FamilyTodoTable
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref FamilyTodoTable
+            StreamName:
+              !Select [3, !Split ["/", !GetAtt FamilyTodoTable.StreamArn]]
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt EventProcessorDLQ.QueueName
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
+
+  SnapshotManagerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-snapshot-manager-${Environment}"
+      CodeUri: target/lambda/bootstrap/bootstrap.zip
+      Handler: bootstrap
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+            Description: Daily snapshot creation
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FamilyTodoTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
+
+  # Dead Letter Queue for Event Processor
+  EventProcessorDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "family-todo-event-processor-dlq-${Environment}"
+      MessageRetentionPeriod: 1209600 # 14 days
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: FamilyTodo
+
+  # CloudWatch Log Groups
+  CommandHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-command-handler-${Environment}"
+      RetentionInDays: 14
+
+  QueryHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-query-handler-${Environment}"
+      RetentionInDays: 14
+
+  EventProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-event-processor-${Environment}"
+      RetentionInDays: 14
+
+  SnapshotManagerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-snapshot-manager-${Environment}"
+      RetentionInDays: 14
+
+Outputs:
+  ApiGatewayUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${FamilyTodoApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref FamilyTodoUserPool
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolId"
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref FamilyTodoUserPoolClient
+    Export:
+      Name: !Sub "${AWS::StackName}-UserPoolClientId"
+
+  DynamoDBTableName:
+    Description: DynamoDB Table Name
+    Value: !Ref FamilyTodoTable
+    Export:
+      Name: !Sub "${AWS::StackName}-TableName"
