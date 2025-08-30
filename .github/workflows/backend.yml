@@ -1,0 +1,145 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "infra/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "infra/**"
+
+env:
+  RUST_VERSION: "1.75"
+  AWS_REGION: "ap-northeast-1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-unknown-linux-musl
+          components: rustfmt, clippy
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "backend -> target"
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          
+      - name: Run tests
+        run: |
+          cd backend
+          cargo fmt -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
+          cargo test --all-features --verbose
+      
+      - name: Security audit
+        run: |
+          cargo install --locked cargo-audit
+          cd backend
+          cargo audit
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-unknown-linux-musl
+          components: rustfmt, clippy
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "backend -> target"
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          
+      - name: Build Lambda functions
+        run: |
+          cd backend
+          cargo build --release --target aarch64-unknown-linux-musl
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: lambda-binaries
+          path: backend/target/aarch64-unknown-linux-musl/release/bootstrap*
+          retention-days: 1
+
+  deploy:
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: lambda-binaries
+          path: backend/target/aarch64-unknown-linux-musl/release/
+      
+      - name: Make binaries executable
+        run: |
+          chmod +x backend/target/aarch64-unknown-linux-musl/release/bootstrap
+      
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Build with SAM
+        run: |
+          cd infra
+          sam build \
+            --use-container \
+            --parallel \
+            --cached
+      
+      - name: Deploy to AWS
+        run: |
+          cd infra
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name family-todo-app-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} \
+            --s3-bucket ${{ secrets.SAM_ARTIFACTS_BUCKET }} \
+            --s3-prefix family-todo-app \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides \
+              Environment=${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+      
+      - name: Run smoke tests
+        run: |
+          cd tests
+          npm ci
+          npm run smoke-test
+        env:
+          API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
+          USER_POOL_ID: ${{ secrets.USER_POOL_ID }}
+          USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID }}

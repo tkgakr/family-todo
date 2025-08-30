@@ -1,0 +1,35 @@
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "family-todo-app"
+s3_bucket = "family-todo-sam-artifacts"
+s3_prefix = "family-todo-app"
+region = "ap-northeast-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=dev"
+confirm_changeset = false
+fail_on_empty_changeset = false
+
+[staging]
+[staging.deploy]
+[staging.deploy.parameters]
+stack_name = "family-todo-app-staging"
+s3_bucket = "family-todo-sam-artifacts-staging"
+s3_prefix = "family-todo-app"
+region = "ap-northeast-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=staging"
+confirm_changeset = false
+fail_on_empty_changeset = false
+
+[prod]
+[prod.deploy]
+[prod.deploy.parameters]
+stack_name = "family-todo-app-prod"
+s3_bucket = "family-todo-sam-artifacts-prod"
+s3_prefix = "family-todo-app"
+region = "ap-northeast-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=prod"
+confirm_changeset = true
+fail_on_empty_changeset = false

@@ -1,0 +1,149 @@
+name: Deploy Frontend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+
+env:
+  NODE_VERSION: "20"
+  AWS_REGION: "ap-northeast-1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+      
+      - name: Run linting and formatting checks
+        run: |
+          cd frontend
+          npm run check
+      
+      - name: Run type checking
+        run: |
+          cd frontend
+          npx tsc --noEmit
+      
+      - name: Run unit tests
+        run: |
+          cd frontend
+          npm test -- --run
+      
+      - name: Build application
+        run: |
+          cd frontend
+          npm run build
+        env:
+          VITE_USER_POOL_ID: ${{ secrets.USER_POOL_ID }}
+          VITE_USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID }}
+          VITE_IDENTITY_POOL_ID: ${{ secrets.IDENTITY_POOL_ID }}
+          VITE_API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
+          VITE_AWS_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to S3
+        run: |
+          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+            --delete \
+            --exact-timestamps \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html" \
+            --exclude "service-worker.js"
+          
+          # Upload HTML files with no-cache
+          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+            --delete \
+            --exact-timestamps \
+            --cache-control "no-cache" \
+            --include "*.html" \
+            --include "service-worker.js"
+      
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+  e2e-tests:
+    needs: [deploy]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+          npx playwright install --with-deps
+      
+      - name: Run E2E tests
+        run: |
+          cd frontend
+          npm run test:e2e
+        env:
+          BASE_URL: ${{ secrets.FRONTEND_URL }}
+          USER_POOL_ID: ${{ secrets.USER_POOL_ID }}
+          USER_POOL_CLIENT_ID: ${{ secrets.USER_POOL_CLIENT_ID }}
+          TEST_USERNAME: ${{ secrets.TEST_USERNAME }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+      
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: e2e-test-results
+          path: frontend/test-results/
+          retention-days: 7

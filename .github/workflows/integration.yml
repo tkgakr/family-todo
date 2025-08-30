@@ -1,0 +1,110 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run integration tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  NODE_VERSION: "20"
+  RUST_VERSION: "1.75"
+  AWS_REGION: "ap-northeast-1"
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      dynamodb-local:
+        image: amazon/dynamodb-local:latest
+        ports:
+          - 8000:8000
+        options: >-
+          --health-cmd "curl -f http://localhost:8000/shell || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt, clippy
+      
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "backend -> target"
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+      
+      - name: Install test dependencies
+        run: |
+          cd tests
+          npm ci
+      
+      - name: Setup DynamoDB Local tables
+        run: |
+          cd tests
+          npm run setup-local-db
+        env:
+          DYNAMODB_ENDPOINT: http://localhost:8000
+      
+      - name: Run integration tests
+        run: |
+          cd tests
+          npm run integration
+        env:
+          DYNAMODB_ENDPOINT: http://localhost:8000
+          TABLE_NAME: TestTable
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: ap-northeast-1
+      
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: integration-test-results
+          path: tests/test-results/
+          retention-days: 7
+
+  load-tests:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+      
+      - name: Run load tests
+        run: |
+          cd tests/load
+          k6 run k6-script.js
+        env:
+          API_ENDPOINT: ${{ secrets.API_ENDPOINT }}
+          AUTH_TOKEN: ${{ secrets.LOAD_TEST_AUTH_TOKEN }}
+      
+      - name: Upload load test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: load-test-results
+          path: tests/load/results/
+          retention-days: 7
