@@ -1,6 +1,18 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+pub enum DomainError {
+    #[error("Invalid TodoId: {0}")]
+    InvalidTodoId(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Invalid event data: {0}")]
+    InvalidEvent(String),
+}
+
+#[derive(Debug, Error)]
 pub enum TodoError {
     #[error("Validation error: {0}")]
     Validation(String),
@@ -19,4 +31,7 @@ pub enum TodoError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Domain error: {0}")]
+    Domain(#[from] DomainError),
 }
