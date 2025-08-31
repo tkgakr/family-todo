@@ -1,6 +1,7 @@
 use anyhow::Result;
-use opentelemetry::{global, sdk::trace as sdktrace};
+use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{trace as sdktrace, Resource};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub fn init_telemetry() -> Result<()> {
@@ -15,10 +16,10 @@ pub fn init_telemetry() -> Result<()> {
         .tracing()
         .with_exporter(exporter)
         .with_trace_config(
-            sdktrace::config()
-                .with_resource(sdktrace::Resource::new(vec![
-                    opentelemetry::KeyValue::new("service.name", "todo-backend"),
-                    opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+            sdktrace::Config::default()
+                .with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", "todo-backend"),
+                    KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
                 ]))
                 .with_sampler(
                     match std::env::var("RUST_ENV").as_deref() {
@@ -27,7 +28,7 @@ pub fn init_telemetry() -> Result<()> {
                     }
                 ),
         )
-        .install_batch(opentelemetry::runtime::Tokio)?;
+        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
 
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().json())

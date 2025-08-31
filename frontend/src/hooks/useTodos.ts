@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { todosApi } from '../api/todos'
-import { TodoStatus, CreateTodoRequest, UpdateTodoRequest } from '../types/todo'
+import { TodoStatus, type CreateTodoRequest, type UpdateTodoRequest } from '../types/todo'
 
 export const useTodos = (status: TodoStatus = TodoStatus.Active) => {
   return useQuery({

@@ -1,6 +1,6 @@
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { AuthUser } from 'aws-amplify/auth'
+import type { AuthUser } from 'aws-amplify/auth'
 import { LogOut, Settings, CheckSquare, User } from 'lucide-react'
 
 interface LayoutProps {
@@ -60,6 +60,7 @@ export default function Layout({ children, user, signOut }: LayoutProps) {
                 </div>
                 
                 <button
+                  type="button"
                   onClick={signOut}
                   className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
                   title="ログアウト"

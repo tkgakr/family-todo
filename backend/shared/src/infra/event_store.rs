@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::collections::VecDeque;
 use tracing::{error, info};
 
 use crate::domain::{
@@ -108,7 +107,7 @@ impl EventStore {
         last_snapshot_date: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<()> {
         let should_create_snapshot = event_count >= SNAPSHOT_EVENT_THRESHOLD ||
-            last_snapshot_date.map_or(true, |date| {
+            last_snapshot_date.is_none_or(|date| {
                 chrono::Utc::now().signed_duration_since(date).num_days() >= SNAPSHOT_AGE_THRESHOLD_DAYS
             });
 
@@ -173,9 +172,9 @@ impl EventProcessor {
         family_id: &FamilyId,
         event: TodoEvent,
     ) -> Result<()> {
-        let todo_id = event.todo_id();
+        let todo_id = event.todo_id().clone();
         
-        let current_todo = self.repository.get_todo(family_id, todo_id).await
+        let current_todo = self.repository.get_todo(family_id, &todo_id).await
             .unwrap_or_else(|_| Todo::default());
         
         let mut updated_todo = current_todo.clone();

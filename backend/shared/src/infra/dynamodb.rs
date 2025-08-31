@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use aws_config::BehaviorVersion;
 use aws_sdk_dynamodb::{
     types::{AttributeValue, ReturnValue},
@@ -7,7 +7,7 @@ use aws_sdk_dynamodb::{
 use once_cell::sync::Lazy;
 use serde_json;
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::domain::{
     aggregates::{Todo, TodoSnapshot, TodoUpdates},
@@ -44,7 +44,7 @@ impl DynamoDbRepository {
     ) -> Result<()> {
         let event_id = event.event_id().as_str();
         let pk = format!("FAMILY#{}", family_id.as_str());
-        let sk = format!("EVENT#{}", event_id);
+        let sk = format!("EVENT#{event_id}");
 
         let event_json = serde_json::to_string(event)?;
 

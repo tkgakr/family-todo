@@ -6,17 +6,12 @@ use crate::domain::{
     error::{DomainError, DomainResult},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum TodoStatus {
+    #[default]
     Active,
     Completed,
     Deleted,
-}
-
-impl Default for TodoStatus {
-    fn default() -> Self {
-        TodoStatus::Active
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,21 +156,11 @@ impl Default for Todo {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TodoUpdates {
     pub title: Option<String>,
     pub description: Option<String>,
     pub tags: Option<Vec<String>>,
-}
-
-impl Default for TodoUpdates {
-    fn default() -> Self {
-        Self {
-            title: None,
-            description: None,
-            tags: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

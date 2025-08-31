@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus, Check, Clock, Trash2, Edit } from 'lucide-react'
 import { useTodos, useCreateTodo, useCompleteTodo, useDeleteTodo } from '../hooks/useTodos'
-import { TodoStatus, CreateTodoRequest } from '../types/todo'
+import { TodoStatus, type CreateTodoRequest } from '../types/todo'
 import TodoForm from '../components/TodoForm'
 
 export default function TodoList() {

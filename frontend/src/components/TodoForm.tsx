@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
-import { CreateTodoRequest } from '../types/todo'
+import type { CreateTodoRequest } from '../types/todo'
 
 interface TodoFormProps {
   onSubmit: (data: CreateTodoRequest) => void

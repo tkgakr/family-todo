@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import { Todo, CreateTodoRequest, UpdateTodoRequest, TodoListResponse, TodoHistoryResponse, TodoStatus } from '../types/todo'
+import { type Todo, type CreateTodoRequest, type UpdateTodoRequest, type TodoListResponse, type TodoHistoryResponse, TodoStatus } from '../types/todo'
 
 export const todosApi = {
   // Get all todos

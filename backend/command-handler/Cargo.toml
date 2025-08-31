@@ -16,5 +16,5 @@ chrono = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-aws-lambda-events = { workspace = true }
+aws_lambda_events = { workspace = true }
 lambda_runtime = { workspace = true }

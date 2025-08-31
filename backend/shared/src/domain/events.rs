@@ -70,9 +70,7 @@ impl TodoEvent {
     }
 
     pub fn upcast(self) -> TodoEvent {
-        match self {
-            _ => self,
-        }
+        self
     }
 }
 
