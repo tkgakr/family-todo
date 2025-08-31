@@ -74,7 +74,7 @@
     - エラーハンドリングと DLQ 送信機能を実装する
     - _要件: 2.3, 2.5_
 
-  - [ ] 4.4 SnapshotManager Lambda 関数を実装
+  - [x] 4.4 SnapshotManager Lambda 関数を実装
     - 定期的なスナップショット作成ロジックを実装する
     - 古いスナップショットの TTL 設定機能を実装する
     - EventBridge による定期実行の設定を実装する
