@@ -53,7 +53,7 @@
 
 - [ ] 4. Lambda 関数の実装
 
-  - [ ] 4.1 CommandHandler Lambda 関数を実装
+  - [x] 4.1 CommandHandler Lambda 関数を実装
 
     - API Gateway イベントのパースとルーティングを実装する
     - ToDo 作成、更新、完了、削除コマンドの処理を実装する
