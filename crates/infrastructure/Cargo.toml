@@ -14,3 +14,8 @@ tokio = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+ulid = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+futures = "0.3"
