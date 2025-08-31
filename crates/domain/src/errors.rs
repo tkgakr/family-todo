@@ -22,6 +22,49 @@ pub enum DomainError {
 
     #[error("Unknown event type: {0}")]
     UnknownEventType(String),
+
+    // 家族関連のエラー
+    #[error("Invalid FamilyId: {0}")]
+    InvalidFamilyId(String),
+
+    #[error("Invalid UserId: {0}")]
+    InvalidUserId(String),
+
+    #[error("Invalid family role: {0}")]
+    InvalidFamilyRole(String),
+
+    #[error("Invalid email: {0}")]
+    InvalidEmail(String),
+
+    #[error("Invalid display name: {0}")]
+    InvalidDisplayName(String),
+
+    #[error("Invalid family name: {0}")]
+    InvalidFamilyName(String),
+
+    #[error("Invalid invitation token: {0}")]
+    InvalidInvitationToken(String),
+
+    #[error("Invalid expiration date: {0}")]
+    InvalidExpirationDate(String),
+
+    #[error("Member already exists: {0}")]
+    MemberAlreadyExists(String),
+
+    #[error("Member not found: {0}")]
+    MemberNotFound(String),
+
+    #[error("Cannot remove the last admin")]
+    CannotRemoveLastAdmin,
+
+    #[error("Invitation expired")]
+    InvitationExpired,
+
+    #[error("Invitation already used")]
+    InvitationAlreadyUsed,
+
+    #[error("Unauthorized operation")]
+    Unauthorized,
 }
 
 #[derive(Debug, Error)]

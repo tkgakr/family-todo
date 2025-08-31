@@ -479,6 +479,7 @@ Resources:
       Environment:
         Variables:
           SES_CONFIGURATION_SET: !Ref FamilyTodoSESConfigurationSet
+          SES_FROM_EMAIL: !Sub "noreply@${Environment}.familytodo.app"
           COGNITO_USER_POOL_ID: !Ref FamilyTodoUserPool
           COGNITO_CLIENT_ID: !Ref FamilyTodoUserPoolClient
           FRONTEND_URL: !Sub "https://${Environment}.familytodo.app"

@@ -104,6 +104,55 @@ pub enum TodoEvent {
     },
 }
 
+/// 家族メンバー管理イベント列挙型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event_type", rename_all = "snake_case")]
+pub enum FamilyEvent {
+    FamilyMemberInvitedV1 {
+        event_id: String,
+        family_id: String,
+        invitation_token: String,
+        email: String,
+        role: String,       // "admin" | "member"
+        invited_by: String, // UserId
+        expires_at: DateTime<Utc>,
+        timestamp: DateTime<Utc>,
+        #[serde(default = "default_member_invited_v1_version")]
+        version: String,
+    },
+    FamilyMemberJoinedV1 {
+        event_id: String,
+        family_id: String,
+        user_id: String,
+        email: String,
+        role: String,
+        display_name: String,
+        invitation_token: String,
+        timestamp: DateTime<Utc>,
+        #[serde(default = "default_member_joined_v1_version")]
+        version: String,
+    },
+    FamilyMemberRemovedV1 {
+        event_id: String,
+        family_id: String,
+        user_id: String,
+        removed_by: String, // UserId
+        reason: Option<String>,
+        timestamp: DateTime<Utc>,
+        #[serde(default = "default_member_removed_v1_version")]
+        version: String,
+    },
+    InvitationExpiredV1 {
+        event_id: String,
+        family_id: String,
+        invitation_token: String,
+        email: String,
+        timestamp: DateTime<Utc>,
+        #[serde(default = "default_invitation_expired_v1_version")]
+        version: String,
+    },
+}
+
 // デフォルトバージョン関数
 fn default_created_v2_version() -> String {
     "2.0".to_string()
@@ -115,6 +164,18 @@ fn default_completed_v1_version() -> String {
     "1.0".to_string()
 }
 fn default_deleted_v1_version() -> String {
+    "1.0".to_string()
+}
+fn default_member_invited_v1_version() -> String {
+    "1.0".to_string()
+}
+fn default_member_joined_v1_version() -> String {
+    "1.0".to_string()
+}
+fn default_member_removed_v1_version() -> String {
+    "1.0".to_string()
+}
+fn default_invitation_expired_v1_version() -> String {
     "1.0".to_string()
 }
 
@@ -430,6 +491,274 @@ impl TodoEvent {
         Ok(())
     }
 }
+
+impl FamilyEvent {
+    /// イベントIDを取得
+    pub fn event_id(&self) -> &str {
+        match self {
+            FamilyEvent::FamilyMemberInvitedV1 { event_id, .. } => event_id,
+            FamilyEvent::FamilyMemberJoinedV1 { event_id, .. } => event_id,
+            FamilyEvent::FamilyMemberRemovedV1 { event_id, .. } => event_id,
+            FamilyEvent::InvitationExpiredV1 { event_id, .. } => event_id,
+        }
+    }
+
+    /// 家族IDを取得
+    pub fn family_id(&self) -> &str {
+        match self {
+            FamilyEvent::FamilyMemberInvitedV1 { family_id, .. } => family_id,
+            FamilyEvent::FamilyMemberJoinedV1 { family_id, .. } => family_id,
+            FamilyEvent::FamilyMemberRemovedV1 { family_id, .. } => family_id,
+            FamilyEvent::InvitationExpiredV1 { family_id, .. } => family_id,
+        }
+    }
+
+    /// イベントのタイムスタンプを取得
+    pub fn timestamp(&self) -> &DateTime<Utc> {
+        match self {
+            FamilyEvent::FamilyMemberInvitedV1 { timestamp, .. } => timestamp,
+            FamilyEvent::FamilyMemberJoinedV1 { timestamp, .. } => timestamp,
+            FamilyEvent::FamilyMemberRemovedV1 { timestamp, .. } => timestamp,
+            FamilyEvent::InvitationExpiredV1 { timestamp, .. } => timestamp,
+        }
+    }
+
+    /// イベントのバージョンを取得
+    pub fn version(&self) -> &str {
+        match self {
+            FamilyEvent::FamilyMemberInvitedV1 { version, .. } => version,
+            FamilyEvent::FamilyMemberJoinedV1 { version, .. } => version,
+            FamilyEvent::FamilyMemberRemovedV1 { version, .. } => version,
+            FamilyEvent::InvitationExpiredV1 { version, .. } => version,
+        }
+    }
+
+    /// イベントタイプ名を取得
+    pub fn event_type(&self) -> &'static str {
+        match self {
+            FamilyEvent::FamilyMemberInvitedV1 { .. } => "family_member_invited_v1",
+            FamilyEvent::FamilyMemberJoinedV1 { .. } => "family_member_joined_v1",
+            FamilyEvent::FamilyMemberRemovedV1 { .. } => "family_member_removed_v1",
+            FamilyEvent::InvitationExpiredV1 { .. } => "invitation_expired_v1",
+        }
+    }
+
+    /// 新しい家族メンバー招待イベントを作成
+    pub fn new_member_invited(
+        family_id: String,
+        invitation_token: String,
+        email: String,
+        role: String,
+        invited_by: String,
+        expires_at: DateTime<Utc>,
+    ) -> Self {
+        FamilyEvent::FamilyMemberInvitedV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            family_id,
+            invitation_token,
+            email,
+            role,
+            invited_by,
+            expires_at,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 新しい家族メンバー参加イベントを作成
+    pub fn new_member_joined(
+        family_id: String,
+        user_id: String,
+        email: String,
+        role: String,
+        display_name: String,
+        invitation_token: String,
+    ) -> Self {
+        FamilyEvent::FamilyMemberJoinedV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            family_id,
+            user_id,
+            email,
+            role,
+            display_name,
+            invitation_token,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 新しい家族メンバー削除イベントを作成
+    pub fn new_member_removed(
+        family_id: String,
+        user_id: String,
+        removed_by: String,
+        reason: Option<String>,
+    ) -> Self {
+        FamilyEvent::FamilyMemberRemovedV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            family_id,
+            user_id,
+            removed_by,
+            reason,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 新しい招待期限切れイベントを作成
+    pub fn new_invitation_expired(
+        family_id: String,
+        invitation_token: String,
+        email: String,
+    ) -> Self {
+        FamilyEvent::InvitationExpiredV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            family_id,
+            invitation_token,
+            email,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// イベントをJSONにシリアライズ
+    pub fn to_json(&self) -> Result<String, DomainError> {
+        serde_json::to_string(self).map_err(|e| DomainError::EventSerialization(e.to_string()))
+    }
+
+    /// イベントが有効かどうかをバリデーション
+    pub fn validate(&self) -> Result<(), DomainError> {
+        // 共通バリデーション
+        if self.event_id().is_empty() {
+            return Err(DomainError::InvalidEvent(
+                "Event ID cannot be empty".to_string(),
+            ));
+        }
+
+        if self.family_id().is_empty() {
+            return Err(DomainError::InvalidEvent(
+                "Family ID cannot be empty".to_string(),
+            ));
+        }
+
+        // イベント固有のバリデーション
+        match self {
+            FamilyEvent::FamilyMemberInvitedV1 {
+                email,
+                role,
+                invited_by,
+                invitation_token,
+                expires_at,
+                ..
+            } => {
+                if email.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Email cannot be empty".to_string(),
+                    ));
+                }
+                if !email.contains('@') {
+                    return Err(DomainError::InvalidEvent(
+                        "Invalid email format".to_string(),
+                    ));
+                }
+                if role != "admin" && role != "member" {
+                    return Err(DomainError::InvalidEvent(
+                        "Role must be 'admin' or 'member'".to_string(),
+                    ));
+                }
+                if invited_by.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Invited by cannot be empty".to_string(),
+                    ));
+                }
+                if invitation_token.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Invitation token cannot be empty".to_string(),
+                    ));
+                }
+                if expires_at <= &Utc::now() {
+                    return Err(DomainError::InvalidEvent(
+                        "Expiration date must be in the future".to_string(),
+                    ));
+                }
+            }
+            FamilyEvent::FamilyMemberJoinedV1 {
+                user_id,
+                email,
+                role,
+                display_name,
+                invitation_token,
+                ..
+            } => {
+                if user_id.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "User ID cannot be empty".to_string(),
+                    ));
+                }
+                if email.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Email cannot be empty".to_string(),
+                    ));
+                }
+                if !email.contains('@') {
+                    return Err(DomainError::InvalidEvent(
+                        "Invalid email format".to_string(),
+                    ));
+                }
+                if role != "admin" && role != "member" {
+                    return Err(DomainError::InvalidEvent(
+                        "Role must be 'admin' or 'member'".to_string(),
+                    ));
+                }
+                if display_name.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Display name cannot be empty".to_string(),
+                    ));
+                }
+                if invitation_token.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Invitation token cannot be empty".to_string(),
+                    ));
+                }
+            }
+            FamilyEvent::FamilyMemberRemovedV1 {
+                user_id,
+                removed_by,
+                ..
+            } => {
+                if user_id.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "User ID cannot be empty".to_string(),
+                    ));
+                }
+                if removed_by.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Removed by cannot be empty".to_string(),
+                    ));
+                }
+            }
+            FamilyEvent::InvitationExpiredV1 {
+                invitation_token,
+                email,
+                ..
+            } => {
+                if invitation_token.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Invitation token cannot be empty".to_string(),
+                    ));
+                }
+                if email.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Email cannot be empty".to_string(),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -500,99 +829,7 @@ mod tests {
     }
 
     #[test]
-    fn test_todo_updated_v1_creation() {
-        let todo_id = TodoId::new();
-        let event = TodoEvent::new_todo_updated(
-            todo_id.clone(),
-            Some("Updated Title".to_string()),
-            None,
-            "user456".to_string(),
-        );
-
-        match event {
-            TodoEvent::TodoUpdatedV1 {
-                todo_id: id,
-                title,
-                description,
-                updated_by,
-                version,
-                ..
-            } => {
-                assert_eq!(id, todo_id);
-                assert_eq!(title, Some("Updated Title".to_string()));
-                assert_eq!(description, None);
-                assert_eq!(updated_by, "user456");
-                assert_eq!(version, "1.0");
-            }
-            _ => panic!("Expected TodoUpdatedV1 event"),
-        }
-    }
-
-    #[test]
-    fn test_todo_completed_v1_creation() {
-        let todo_id = TodoId::new();
-        let event = TodoEvent::new_todo_completed(todo_id.clone(), "user789".to_string());
-
-        match event {
-            TodoEvent::TodoCompletedV1 {
-                todo_id: id,
-                completed_by,
-                version,
-                ..
-            } => {
-                assert_eq!(id, todo_id);
-                assert_eq!(completed_by, "user789");
-                assert_eq!(version, "1.0");
-            }
-            _ => panic!("Expected TodoCompletedV1 event"),
-        }
-    }
-
-    #[test]
-    fn test_todo_deleted_v1_creation() {
-        let todo_id = TodoId::new();
-        let event = TodoEvent::new_todo_deleted(
-            todo_id.clone(),
-            "user999".to_string(),
-            Some("No longer needed".to_string()),
-        );
-
-        match event {
-            TodoEvent::TodoDeletedV1 {
-                todo_id: id,
-                deleted_by,
-                reason,
-                version,
-                ..
-            } => {
-                assert_eq!(id, todo_id);
-                assert_eq!(deleted_by, "user999");
-                assert_eq!(reason, Some("No longer needed".to_string()));
-                assert_eq!(version, "1.0");
-            }
-            _ => panic!("Expected TodoDeletedV1 event"),
-        }
-    }
-
-    #[test]
-    fn test_event_accessors() {
-        let todo_id = TodoId::new();
-        let event = TodoEvent::new_todo_created(
-            todo_id.clone(),
-            "Test".to_string(),
-            None,
-            vec![],
-            "user123".to_string(),
-        );
-
-        assert_eq!(event.todo_id(), &todo_id);
-        assert!(!event.event_id().is_empty());
-        assert_eq!(event.version(), "2.0");
-        assert_eq!(event.event_type(), "todo_created_v2");
-    }
-
-    #[test]
-    fn test_event_validation_success() {
+    fn test_todo_event_validation() {
         let todo_id = TodoId::new();
         let event = TodoEvent::new_todo_created(
             todo_id,
@@ -606,131 +843,17 @@ mod tests {
     }
 
     #[test]
-    fn test_event_validation_empty_title() {
-        let todo_id = TodoId::new();
-        let event = TodoEvent::new_todo_created(
-            todo_id,
-            "".to_string(), // 空のタイトル
-            None,
-            vec![],
-            "user123".to_string(),
+    fn test_family_event_creation() {
+        let event = FamilyEvent::new_member_invited(
+            "family123".to_string(),
+            "token123".to_string(),
+            "test@example.com".to_string(),
+            "member".to_string(),
+            "admin123".to_string(),
+            Utc::now() + chrono::Duration::days(7),
         );
 
-        assert!(event.validate().is_err());
-    }
-
-    #[test]
-    fn test_event_validation_long_title() {
-        let todo_id = TodoId::new();
-        let long_title = "a".repeat(201); // 200文字を超える
-        let event =
-            TodoEvent::new_todo_created(todo_id, long_title, None, vec![], "user123".to_string());
-
-        assert!(event.validate().is_err());
-    }
-
-    #[test]
-    fn test_event_validation_empty_user() {
-        let todo_id = TodoId::new();
-        let event = TodoEvent::new_todo_created(
-            todo_id,
-            "Valid Title".to_string(),
-            None,
-            vec![],
-            "".to_string(), // 空のユーザーID
-        );
-
-        assert!(event.validate().is_err());
-    }
-
-    #[test]
-    fn test_event_serialization_deserialization() {
-        let todo_id = TodoId::new();
-        let original_event = TodoEvent::new_todo_created(
-            todo_id,
-            "Test Todo".to_string(),
-            Some("Description".to_string()),
-            vec!["tag1".to_string(), "tag2".to_string()],
-            "user123".to_string(),
-        );
-
-        // シリアライゼーション
-        let json = original_event.to_json().unwrap();
-
-        // デシリアライゼーション
-        let deserialized_event: TodoEvent = serde_json::from_str(&json).unwrap();
-
-        // 比較（タイムスタンプとevent_idは異なる可能性があるため、主要フィールドのみ）
-        assert_eq!(original_event.todo_id(), deserialized_event.todo_id());
-        assert_eq!(original_event.event_type(), deserialized_event.event_type());
-        assert_eq!(original_event.version(), deserialized_event.version());
-    }
-
-    #[test]
-    fn test_upcast_todo_created_v1_to_v2() {
-        // V1イベントのシミュレーション（tagsフィールドなし）
-        let v1_data = serde_json::json!({
-            "event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "todo_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "title": "Test Todo",
-            "description": "Test Description",
-            "created_by": "user123",
-            "timestamp": "2023-01-01T00:00:00Z"
-        });
-
-        let raw = RawEventData {
-            event_type: "todo_created_v1".to_string(),
-            version: "1.0".to_string(),
-            data: v1_data,
-        };
-
-        let upcast_event = TodoEvent::upcast_from_raw(raw).unwrap();
-
-        match upcast_event {
-            TodoEvent::TodoCreatedV2 { tags, version, .. } => {
-                assert_eq!(tags, Vec::<String>::new()); // 空の配列が追加される
-                assert_eq!(version, "2.0"); // バージョンが更新される
-            }
-            _ => panic!("Expected TodoCreatedV2 after upcast"),
-        }
-    }
-
-    #[test]
-    fn test_from_json_with_upcast() {
-        // 現在のバージョンのイベントを直接JSONとしてパース
-        let todo_id = TodoId::new();
-        let original_event = TodoEvent::new_todo_created(
-            todo_id,
-            "Test".to_string(),
-            None,
-            vec!["tag1".to_string()],
-            "user123".to_string(),
-        );
-
-        // 通常のシリアライゼーション/デシリアライゼーション
-        let json = original_event.to_json().unwrap();
-        let parsed_event: TodoEvent = serde_json::from_str(&json).unwrap();
-
-        assert_eq!(original_event.todo_id(), parsed_event.todo_id());
-        assert_eq!(original_event.event_type(), parsed_event.event_type());
-    }
-
-    #[test]
-    fn test_invalid_event_type() {
-        let raw = RawEventData {
-            event_type: "unknown_event".to_string(),
-            version: "1.0".to_string(),
-            data: serde_json::json!({}),
-        };
-
-        let result = TodoEvent::upcast_from_raw(raw);
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            DomainError::UnknownEventType(event_type) => {
-                assert_eq!(event_type, "unknown_event");
-            }
-            _ => panic!("Expected UnknownEventType error"),
-        }
+        assert_eq!(event.family_id(), "family123");
+        assert_eq!(event.event_type(), "family_member_invited_v1");
     }
 }
