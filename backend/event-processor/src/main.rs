@@ -59,7 +59,7 @@ async fn function_handler(
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     init_telemetry().map_err(|e| {
-        eprintln!("Failed to initialize telemetry: {}", e);
+        eprintln!("Failed to initialize telemetry: {e}");
         Error::from(e.to_string())
     })?;
 

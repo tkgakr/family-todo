@@ -1,7 +1,6 @@
 use aws_lambda_events::event::apigw::ApiGatewayProxyResponse;
 use aws_lambda_events::encodings::Body;
 use aws_lambda_events::http::HeaderMap;
-use serde_json;
 use shared::domain::aggregates::Todo;
 
 pub struct ApiResponse;
@@ -47,6 +46,7 @@ impl ApiResponse {
         Self::error(404, "Not Found", message)
     }
 
+    #[allow(dead_code)]
     pub fn conflict(message: &str) -> ApiGatewayProxyResponse {
         Self::error(409, "Conflict", message)
     }

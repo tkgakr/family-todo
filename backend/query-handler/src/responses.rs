@@ -1,7 +1,6 @@
 use aws_lambda_events::event::apigw::ApiGatewayProxyResponse;
 use aws_lambda_events::encodings::Body;
 use aws_lambda_events::http::HeaderMap;
-use serde_json;
 
 pub struct ApiResponse;
 

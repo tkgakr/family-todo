@@ -39,6 +39,7 @@ pub fn is_retryable_error(error: &anyhow::Error) -> bool {
     error_string.contains("network")
 }
 
+#[allow(dead_code)]
 pub fn is_retryable(error: &ProcessError) -> bool {
     matches!(
         error,

@@ -210,7 +210,7 @@ impl QueryHandler {
         let family_id_str = request
             .headers
             .get("x-family-id")
-            .or_else(|| None)
+            .or(None)
             .ok_or_else(|| anyhow::anyhow!("Family ID is required"))?;
 
         FamilyId::from_string(family_id_str.to_str().unwrap_or("").to_string())

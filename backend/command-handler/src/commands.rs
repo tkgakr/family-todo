@@ -29,6 +29,7 @@ pub struct DeleteTodoCommand {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "command_type")]
+#[allow(clippy::enum_variant_names)]
 pub enum TodoCommand {
     CreateTodo(CreateTodoCommand),
     UpdateTodo(UpdateTodoCommand),
@@ -37,6 +38,7 @@ pub enum TodoCommand {
 }
 
 impl TodoCommand {
+    #[allow(dead_code)]
     pub fn validate(&self) -> Result<(), String> {
         match self {
             TodoCommand::CreateTodo(cmd) => {
