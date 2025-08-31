@@ -51,7 +51,7 @@
     - 楽観的ロックの統合テストを作成する
     - _要件: 1.2, 5.2_
 
-- [ ] 4. Lambda 関数の実装
+- [x] 4. Lambda 関数の実装
 
   - [x] 4.1 CommandHandler Lambda 関数を実装
 

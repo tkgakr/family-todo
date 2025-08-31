@@ -54,7 +54,7 @@ impl OptimisticLockService {
             .projection_repo
             .get_projection(family_id, todo_id)
             .await?
-            .ok_or_else(|| TodoError::NotFound(format!("ToDo not found: {}", todo_id)))?;
+            .ok_or_else(|| TodoError::NotFound(format!("ToDo not found: {todo_id}")))?;
 
         // バージョンチェック
         if current_todo.version != expected_version {
@@ -111,7 +111,7 @@ impl OptimisticLockService {
                     .projection_repo
                     .get_projection(family_id, todo_id)
                     .await?
-                    .ok_or_else(|| TodoError::NotFound(format!("ToDo not found: {}", todo_id)))?;
+                    .ok_or_else(|| TodoError::NotFound(format!("ToDo not found: {todo_id}")))?;
 
                 // イベントを生成
                 let event = event_generator(&current_todo)?;
@@ -137,11 +137,11 @@ impl OptimisticLockService {
             family_id, todo.id, expected_version
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("TODO#CURRENT#{}", todo.id.as_str());
 
         let todo_json = serde_json::to_string(todo)
-            .map_err(|e| TodoError::Internal(format!("ToDo シリアライゼーションエラー: {}", e)))?;
+            .map_err(|e| TodoError::Internal(format!("ToDo シリアライゼーションエラー: {e}")))?;
 
         retry_dynamodb_operation(
             || async {
@@ -216,7 +216,7 @@ impl OptimisticLockService {
         family_id: &str,
         todo_id: &TodoId,
     ) -> Result<Option<u64>, TodoError> {
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
@@ -267,7 +267,7 @@ impl OptimisticLockService {
         self.event_repo.save_event(family_id, delete_event).await?;
 
         // プロジェクションを条件付きで削除
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(

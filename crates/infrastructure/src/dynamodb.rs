@@ -55,7 +55,7 @@ impl DynamoDbClient {
                 );
                 // 開発環境では警告のみ、本番環境ではエラーとして扱う可能性
                 if config.environment == "prod" {
-                    return Err(TodoError::DynamoDb(format!("テーブル接続エラー: {}", e)));
+                    return Err(TodoError::DynamoDb(format!("テーブル接続エラー: {e}")));
                 }
             }
         }
@@ -123,7 +123,7 @@ impl DynamoDbClient {
             TodoError::DynamoDb("サービスが一時的に利用できません".to_string())
         } else {
             error!("予期しない DynamoDB エラー: {}", error_str);
-            TodoError::DynamoDb(format!("DynamoDB エラー: {}", error_str))
+            TodoError::DynamoDb(format!("DynamoDB エラー: {error_str}"))
         }
     }
 

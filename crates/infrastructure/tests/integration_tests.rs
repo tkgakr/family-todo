@@ -1,3 +1,6 @@
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::redundant_pattern_matching)]
+
 use domain::{Todo, TodoError, TodoEvent, TodoId};
 use infrastructure::{
     DynamoDbClient, EventRepository, OptimisticLockService, ProjectionRepository,

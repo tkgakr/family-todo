@@ -154,8 +154,7 @@ mod todo_id_tests {
             let result = TodoId::from_string(invalid_id.to_string());
             assert!(
                 result.is_err(),
-                "Expected error for invalid ULID: {}",
-                invalid_id
+                "Expected error for invalid ULID: {invalid_id}"
             );
         }
     }
@@ -213,7 +212,7 @@ mod todo_id_tests {
     fn test_display_trait() {
         let ulid_str = ulid::Ulid::new().to_string();
         let todo_id = TodoId::from_string_unchecked(ulid_str.clone());
-        assert_eq!(format!("{}", todo_id), ulid_str);
+        assert_eq!(format!("{todo_id}"), ulid_str);
     }
 
     #[test]

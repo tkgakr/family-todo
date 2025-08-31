@@ -229,6 +229,207 @@ fn upcast_todo_created_v1_to_v2(data: Value) -> Result<TodoEvent, DomainError> {
     serde_json::from_value(v2_data).map_err(|e| DomainError::EventDeserialization(e.to_string()))
 }
 
+impl TodoEvent {
+    /// イベントに関連するTodoIdを取得
+    pub fn todo_id(&self) -> &TodoId {
+        match self {
+            TodoEvent::TodoCreatedV2 { todo_id, .. } => todo_id,
+            TodoEvent::TodoUpdatedV1 { todo_id, .. } => todo_id,
+            TodoEvent::TodoCompletedV1 { todo_id, .. } => todo_id,
+            TodoEvent::TodoDeletedV1 { todo_id, .. } => todo_id,
+        }
+    }
+
+    /// イベントIDを取得
+    pub fn event_id(&self) -> &str {
+        match self {
+            TodoEvent::TodoCreatedV2 { event_id, .. } => event_id,
+            TodoEvent::TodoUpdatedV1 { event_id, .. } => event_id,
+            TodoEvent::TodoCompletedV1 { event_id, .. } => event_id,
+            TodoEvent::TodoDeletedV1 { event_id, .. } => event_id,
+        }
+    }
+
+    /// イベントのタイムスタンプを取得
+    pub fn timestamp(&self) -> &DateTime<Utc> {
+        match self {
+            TodoEvent::TodoCreatedV2 { timestamp, .. } => timestamp,
+            TodoEvent::TodoUpdatedV1 { timestamp, .. } => timestamp,
+            TodoEvent::TodoCompletedV1 { timestamp, .. } => timestamp,
+            TodoEvent::TodoDeletedV1 { timestamp, .. } => timestamp,
+        }
+    }
+
+    /// イベントのバージョンを取得
+    pub fn version(&self) -> &str {
+        match self {
+            TodoEvent::TodoCreatedV2 { version, .. } => version,
+            TodoEvent::TodoUpdatedV1 { version, .. } => version,
+            TodoEvent::TodoCompletedV1 { version, .. } => version,
+            TodoEvent::TodoDeletedV1 { version, .. } => version,
+        }
+    }
+
+    /// イベントタイプ名を取得
+    pub fn event_type(&self) -> &'static str {
+        match self {
+            TodoEvent::TodoCreatedV2 { .. } => "todo_created_v2",
+            TodoEvent::TodoUpdatedV1 { .. } => "todo_updated_v1",
+            TodoEvent::TodoCompletedV1 { .. } => "todo_completed_v1",
+            TodoEvent::TodoDeletedV1 { .. } => "todo_deleted_v1",
+        }
+    }
+
+    /// 新しいTodoCreatedV2イベントを作成
+    pub fn new_todo_created(
+        todo_id: TodoId,
+        title: String,
+        description: Option<String>,
+        tags: Vec<String>,
+        created_by: String,
+    ) -> Self {
+        TodoEvent::TodoCreatedV2 {
+            event_id: ulid::Ulid::new().to_string(),
+            todo_id,
+            title,
+            description,
+            tags,
+            created_by,
+            timestamp: Utc::now(),
+            version: "2.0".to_string(),
+        }
+    }
+
+    /// 新しいTodoUpdatedV1イベントを作成
+    pub fn new_todo_updated(
+        todo_id: TodoId,
+        title: Option<String>,
+        description: Option<String>,
+        updated_by: String,
+    ) -> Self {
+        TodoEvent::TodoUpdatedV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            todo_id,
+            title,
+            description,
+            updated_by,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 新しいTodoCompletedV1イベントを作成
+    pub fn new_todo_completed(todo_id: TodoId, completed_by: String) -> Self {
+        TodoEvent::TodoCompletedV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            todo_id,
+            completed_by,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 新しいTodoDeletedV1イベントを作成
+    pub fn new_todo_deleted(todo_id: TodoId, deleted_by: String, reason: Option<String>) -> Self {
+        TodoEvent::TodoDeletedV1 {
+            event_id: ulid::Ulid::new().to_string(),
+            todo_id,
+            deleted_by,
+            reason,
+            timestamp: Utc::now(),
+            version: "1.0".to_string(),
+        }
+    }
+
+    /// 生のJSONからイベントをデシリアライズ（アップキャスト対応）
+    pub fn from_json_with_upcast(json: &str) -> Result<Self, DomainError> {
+        // まず生のデータとして読み込み
+        let raw: RawEventData = serde_json::from_str(json)
+            .map_err(|e| DomainError::EventDeserialization(e.to_string()))?;
+
+        // アップキャストを実行
+        Self::upcast_from_raw(raw)
+    }
+
+    /// イベントをJSONにシリアライズ
+    pub fn to_json(&self) -> Result<String, DomainError> {
+        serde_json::to_string(self).map_err(|e| DomainError::EventSerialization(e.to_string()))
+    }
+
+    /// イベントが有効かどうかをバリデーション
+    pub fn validate(&self) -> Result<(), DomainError> {
+        // 共通バリデーション
+        if self.event_id().is_empty() {
+            return Err(DomainError::InvalidEvent(
+                "Event ID cannot be empty".to_string(),
+            ));
+        }
+
+        if !self.todo_id().is_valid() {
+            return Err(DomainError::InvalidEvent("Invalid TodoId".to_string()));
+        }
+
+        // イベント固有のバリデーション
+        match self {
+            TodoEvent::TodoCreatedV2 {
+                title, created_by, ..
+            } => {
+                if title.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Title cannot be empty".to_string(),
+                    ));
+                }
+                if title.len() > 200 {
+                    return Err(DomainError::InvalidEvent(
+                        "Title cannot exceed 200 characters".to_string(),
+                    ));
+                }
+                if created_by.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Created by cannot be empty".to_string(),
+                    ));
+                }
+            }
+            TodoEvent::TodoUpdatedV1 {
+                updated_by, title, ..
+            } => {
+                if updated_by.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Updated by cannot be empty".to_string(),
+                    ));
+                }
+                if let Some(title) = title {
+                    if title.is_empty() {
+                        return Err(DomainError::InvalidEvent(
+                            "Title cannot be empty".to_string(),
+                        ));
+                    }
+                    if title.len() > 200 {
+                        return Err(DomainError::InvalidEvent(
+                            "Title cannot exceed 200 characters".to_string(),
+                        ));
+                    }
+                }
+            }
+            TodoEvent::TodoCompletedV1 { completed_by, .. } => {
+                if completed_by.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Completed by cannot be empty".to_string(),
+                    ));
+                }
+            }
+            TodoEvent::TodoDeletedV1 { deleted_by, .. } => {
+                if deleted_by.is_empty() {
+                    return Err(DomainError::InvalidEvent(
+                        "Deleted by cannot be empty".to_string(),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -531,207 +732,5 @@ mod tests {
             }
             _ => panic!("Expected UnknownEventType error"),
         }
-    }
-}
-
-impl TodoEvent {
-    /// イベントに関連するTodoIdを取得
-    pub fn todo_id(&self) -> &TodoId {
-        match self {
-            TodoEvent::TodoCreatedV2 { todo_id, .. } => todo_id,
-            TodoEvent::TodoUpdatedV1 { todo_id, .. } => todo_id,
-            TodoEvent::TodoCompletedV1 { todo_id, .. } => todo_id,
-            TodoEvent::TodoDeletedV1 { todo_id, .. } => todo_id,
-        }
-    }
-
-    /// イベントIDを取得
-    pub fn event_id(&self) -> &str {
-        match self {
-            TodoEvent::TodoCreatedV2 { event_id, .. } => event_id,
-            TodoEvent::TodoUpdatedV1 { event_id, .. } => event_id,
-            TodoEvent::TodoCompletedV1 { event_id, .. } => event_id,
-            TodoEvent::TodoDeletedV1 { event_id, .. } => event_id,
-        }
-    }
-
-    /// イベントのタイムスタンプを取得
-    pub fn timestamp(&self) -> &DateTime<Utc> {
-        match self {
-            TodoEvent::TodoCreatedV2 { timestamp, .. } => timestamp,
-            TodoEvent::TodoUpdatedV1 { timestamp, .. } => timestamp,
-            TodoEvent::TodoCompletedV1 { timestamp, .. } => timestamp,
-            TodoEvent::TodoDeletedV1 { timestamp, .. } => timestamp,
-        }
-    }
-
-    /// イベントのバージョンを取得
-    pub fn version(&self) -> &str {
-        match self {
-            TodoEvent::TodoCreatedV2 { version, .. } => version,
-            TodoEvent::TodoUpdatedV1 { version, .. } => version,
-            TodoEvent::TodoCompletedV1 { version, .. } => version,
-            TodoEvent::TodoDeletedV1 { version, .. } => version,
-        }
-    }
-
-    /// イベントタイプ名を取得
-    pub fn event_type(&self) -> &'static str {
-        match self {
-            TodoEvent::TodoCreatedV2 { .. } => "todo_created_v2",
-            TodoEvent::TodoUpdatedV1 { .. } => "todo_updated_v1",
-            TodoEvent::TodoCompletedV1 { .. } => "todo_completed_v1",
-            TodoEvent::TodoDeletedV1 { .. } => "todo_deleted_v1",
-        }
-    }
-
-    /// 新しいTodoCreatedV2イベントを作成
-    pub fn new_todo_created(
-        todo_id: TodoId,
-        title: String,
-        description: Option<String>,
-        tags: Vec<String>,
-        created_by: String,
-    ) -> Self {
-        TodoEvent::TodoCreatedV2 {
-            event_id: ulid::Ulid::new().to_string(),
-            todo_id,
-            title,
-            description,
-            tags,
-            created_by,
-            timestamp: Utc::now(),
-            version: "2.0".to_string(),
-        }
-    }
-
-    /// 新しいTodoUpdatedV1イベントを作成
-    pub fn new_todo_updated(
-        todo_id: TodoId,
-        title: Option<String>,
-        description: Option<String>,
-        updated_by: String,
-    ) -> Self {
-        TodoEvent::TodoUpdatedV1 {
-            event_id: ulid::Ulid::new().to_string(),
-            todo_id,
-            title,
-            description,
-            updated_by,
-            timestamp: Utc::now(),
-            version: "1.0".to_string(),
-        }
-    }
-
-    /// 新しいTodoCompletedV1イベントを作成
-    pub fn new_todo_completed(todo_id: TodoId, completed_by: String) -> Self {
-        TodoEvent::TodoCompletedV1 {
-            event_id: ulid::Ulid::new().to_string(),
-            todo_id,
-            completed_by,
-            timestamp: Utc::now(),
-            version: "1.0".to_string(),
-        }
-    }
-
-    /// 新しいTodoDeletedV1イベントを作成
-    pub fn new_todo_deleted(todo_id: TodoId, deleted_by: String, reason: Option<String>) -> Self {
-        TodoEvent::TodoDeletedV1 {
-            event_id: ulid::Ulid::new().to_string(),
-            todo_id,
-            deleted_by,
-            reason,
-            timestamp: Utc::now(),
-            version: "1.0".to_string(),
-        }
-    }
-
-    /// 生のJSONからイベントをデシリアライズ（アップキャスト対応）
-    pub fn from_json_with_upcast(json: &str) -> Result<Self, DomainError> {
-        // まず生のデータとして読み込み
-        let raw: RawEventData = serde_json::from_str(json)
-            .map_err(|e| DomainError::EventDeserialization(e.to_string()))?;
-
-        // アップキャストを実行
-        Self::upcast_from_raw(raw)
-    }
-
-    /// イベントをJSONにシリアライズ
-    pub fn to_json(&self) -> Result<String, DomainError> {
-        serde_json::to_string(self).map_err(|e| DomainError::EventSerialization(e.to_string()))
-    }
-
-    /// イベントが有効かどうかをバリデーション
-    pub fn validate(&self) -> Result<(), DomainError> {
-        // 共通バリデーション
-        if self.event_id().is_empty() {
-            return Err(DomainError::InvalidEvent(
-                "Event ID cannot be empty".to_string(),
-            ));
-        }
-
-        if !self.todo_id().is_valid() {
-            return Err(DomainError::InvalidEvent("Invalid TodoId".to_string()));
-        }
-
-        // イベント固有のバリデーション
-        match self {
-            TodoEvent::TodoCreatedV2 {
-                title, created_by, ..
-            } => {
-                if title.is_empty() {
-                    return Err(DomainError::InvalidEvent(
-                        "Title cannot be empty".to_string(),
-                    ));
-                }
-                if title.len() > 200 {
-                    return Err(DomainError::InvalidEvent(
-                        "Title cannot exceed 200 characters".to_string(),
-                    ));
-                }
-                if created_by.is_empty() {
-                    return Err(DomainError::InvalidEvent(
-                        "Created by cannot be empty".to_string(),
-                    ));
-                }
-            }
-            TodoEvent::TodoUpdatedV1 {
-                updated_by, title, ..
-            } => {
-                if updated_by.is_empty() {
-                    return Err(DomainError::InvalidEvent(
-                        "Updated by cannot be empty".to_string(),
-                    ));
-                }
-                if let Some(title) = title {
-                    if title.is_empty() {
-                        return Err(DomainError::InvalidEvent(
-                            "Title cannot be empty".to_string(),
-                        ));
-                    }
-                    if title.len() > 200 {
-                        return Err(DomainError::InvalidEvent(
-                            "Title cannot exceed 200 characters".to_string(),
-                        ));
-                    }
-                }
-            }
-            TodoEvent::TodoCompletedV1 { completed_by, .. } => {
-                if completed_by.is_empty() {
-                    return Err(DomainError::InvalidEvent(
-                        "Completed by cannot be empty".to_string(),
-                    ));
-                }
-            }
-            TodoEvent::TodoDeletedV1 { deleted_by, .. } => {
-                if deleted_by.is_empty() {
-                    return Err(DomainError::InvalidEvent(
-                        "Deleted by cannot be empty".to_string(),
-                    ));
-                }
-            }
-        }
-
-        Ok(())
     }
 }

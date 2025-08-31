@@ -1,5 +1,5 @@
 use aws_lambda_events::event::dynamodb::{Event as DynamoDbEvent, EventRecord};
-use domain::{TodoEvent, TodoId};
+
 use infrastructure::{DynamoDbClient, ProjectionRepository};
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
@@ -44,6 +44,7 @@ pub struct BatchItemFailures {
 
 /// EventProcessor のメイン処理
 pub struct EventProcessor {
+    #[allow(dead_code)]
     projection_repo: ProjectionRepository,
 }
 
@@ -156,13 +157,13 @@ async fn function_handler(event: LambdaEvent<DynamoDbEvent>) -> Result<BatchItem
     // 設定を読み込み
     let config = Config::from_env().map_err(|e| {
         error!("設定読み込みエラー: {}", e);
-        Error::from(format!("設定エラー: {}", e))
+        Error::from(format!("設定エラー: {e}"))
     })?;
 
     // DynamoDBクライアントを初期化
     let db_client = DynamoDbClient::new(&config).await.map_err(|e| {
         error!("DynamoDBクライアント初期化エラー: {}", e);
-        Error::from(format!("DynamoDBエラー: {}", e))
+        Error::from(format!("DynamoDBエラー: {e}"))
     })?;
 
     // プロジェクションリポジトリを初期化
@@ -179,7 +180,7 @@ async fn function_handler(event: LambdaEvent<DynamoDbEvent>) -> Result<BatchItem
         }
         Err(e) => {
             error!("EventProcessor処理エラー: {}", e);
-            Err(Error::from(format!("処理エラー: {}", e)))
+            Err(Error::from(format!("処理エラー: {e}")))
         }
     }
 }
@@ -214,7 +215,7 @@ mod tests {
             let processor = EventProcessor::new(projection_repo);
 
             // プロセッサーが正常に作成されることを確認
-            assert!(std::ptr::addr_of!(processor) as *const _ != std::ptr::null());
+            assert!(!(std::ptr::addr_of!(processor) as *const u8).is_null());
         }
     }
 

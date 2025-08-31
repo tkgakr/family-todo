@@ -10,6 +10,7 @@ use tracing::{error, info, warn};
 
 /// EventBridge スケジュールイベント
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ScheduleEvent {
     #[serde(rename = "detail-type")]
     detail_type: String,
@@ -40,17 +41,17 @@ async fn function_handler(event: LambdaEvent<ScheduleEvent>) -> Result<serde_jso
 
     let config = Config::from_env().map_err(|e| {
         error!("設定読み込みエラー: {}", e);
-        Error::from(format!("設定エラー: {}", e))
+        Error::from(format!("設定エラー: {e}"))
     })?;
 
     let db_client = DynamoDbClient::new(&config).await.map_err(|e| {
         error!("DynamoDBクライアント初期化エラー: {}", e);
-        Error::from(format!("DynamoDBエラー: {}", e))
+        Error::from(format!("DynamoDBエラー: {e}"))
     })?;
 
     let result = process_snapshots(&db_client).await.map_err(|e| {
         error!("スナップショット処理エラー: {}", e);
-        Error::from(format!("処理エラー: {}", e))
+        Error::from(format!("処理エラー: {e}"))
     })?;
 
     info!(
@@ -92,7 +93,7 @@ async fn process_snapshots(db_client: &DynamoDbClient) -> Result<SnapshotResult>
                 );
             }
             Err(e) => {
-                let error_msg = format!("家族{}のスナップショット処理エラー: {}", family_id, e);
+                let error_msg = format!("家族{family_id}のスナップショット処理エラー: {e}");
                 error!("{}", error_msg);
                 errors.push(error_msg);
             }
@@ -399,7 +400,7 @@ mod tests {
         // 実際の実装では、テスト用のDynamoDBクライアントを使用
 
         // 現在は固定値を返すので、その動作をテスト
-        let family_ids = vec!["demo_family".to_string()];
+        let family_ids = ["demo_family".to_string()];
         assert_eq!(family_ids.len(), 1);
         assert_eq!(family_ids[0], "demo_family");
     }

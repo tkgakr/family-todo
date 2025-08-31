@@ -11,6 +11,7 @@ use tracing::{error, info};
 /// API Gateway プロキシリクエスト構造体
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct ApiGatewayProxyRequest {
     http_method: String,
     path: String,
@@ -66,6 +67,7 @@ struct DeleteTodoRequest {
 
 /// コマンドの種類を表す列挙型
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 enum Command {
     CreateTodo {
         title: String,
@@ -98,13 +100,13 @@ async fn function_handler(
     // 設定を読み込み
     let config = Config::from_env().map_err(|e| {
         error!("設定読み込みエラー: {}", e);
-        Error::from(format!("設定エラー: {}", e))
+        Error::from(format!("設定エラー: {e}"))
     })?;
 
     // DynamoDBクライアントを初期化
     let db_client = DynamoDbClient::new(&config).await.map_err(|e| {
         error!("DynamoDBクライアント初期化エラー: {}", e);
-        Error::from(format!("DynamoDBエラー: {}", e))
+        Error::from(format!("DynamoDBエラー: {e}"))
     })?;
 
     let event_repo = EventRepository::new(db_client);

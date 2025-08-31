@@ -29,7 +29,7 @@ impl EventRepository {
         let event_item = EventItem::new(family_id.to_string(), event, 1);
         let dynamodb_item = event_item
             .to_dynamodb_item()
-            .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {}", e)))?;
+            .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {e}")))?;
 
         let attr_map = dynamodb_item.to_attribute_map();
 
@@ -65,7 +65,7 @@ impl EventRepository {
             family_id, todo_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk_prefix = format!("TODO#EVENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
@@ -86,13 +86,11 @@ impl EventRepository {
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| {
-                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
-                            })?;
+                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {e}")))?;
 
                         let event_item =
                             EventItem::from_dynamodb_item(&dynamodb_item).map_err(|e| {
-                                TodoError::Internal(format!("イベントアイテム変換エラー: {}", e))
+                                TodoError::Internal(format!("イベントアイテム変換エラー: {e}"))
                             })?;
 
                         events.push(event_item.event);
@@ -114,7 +112,7 @@ impl EventRepository {
     pub async fn get_all_events(&self, family_id: &str) -> Result<Vec<TodoEvent>, TodoError> {
         info!("全イベント取得中: family_id={}", family_id);
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
 
         retry_dynamodb_operation(
             || async {
@@ -137,13 +135,11 @@ impl EventRepository {
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| {
-                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
-                            })?;
+                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {e}")))?;
 
                         let event_item =
                             EventItem::from_dynamodb_item(&dynamodb_item).map_err(|e| {
-                                TodoError::Internal(format!("イベントアイテム変換エラー: {}", e))
+                                TodoError::Internal(format!("イベントアイテム変換エラー: {e}"))
                             })?;
 
                         events.push(event_item.event);
@@ -172,8 +168,8 @@ impl EventRepository {
             family_id, event_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
-        let sk = format!("EVENT#{}", event_id);
+        let pk = format!("FAMILY#{family_id}");
+        let sk = format!("EVENT#{event_id}");
 
         retry_dynamodb_operation(
             || async {
@@ -190,11 +186,11 @@ impl EventRepository {
 
                 if let Some(item) = response.item {
                     let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                        .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                        .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {e}")))?;
 
                     let event_item =
                         EventItem::from_dynamodb_item(&dynamodb_item).map_err(|e| {
-                            TodoError::Internal(format!("イベントアイテム変換エラー: {}", e))
+                            TodoError::Internal(format!("イベントアイテム変換エラー: {e}"))
                         })?;
 
                     debug!("イベント取得完了: {}", event_id);
@@ -232,7 +228,7 @@ impl ProjectionRepository {
         let projection_item = ProjectionItem::new(family_id.to_string(), todo);
         let dynamodb_item = projection_item
             .to_dynamodb_item()
-            .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {}", e)))?;
+            .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {e}")))?;
 
         let attr_map = dynamodb_item.to_attribute_map();
 
@@ -266,7 +262,7 @@ impl ProjectionRepository {
             family_id, todo_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
@@ -284,14 +280,11 @@ impl ProjectionRepository {
 
                 if let Some(item) = response.item {
                     let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                        .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                        .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {e}")))?;
 
                     let projection_item = ProjectionItem::from_dynamodb_item(&dynamodb_item)
                         .map_err(|e| {
-                            TodoError::Internal(format!(
-                                "プロジェクションアイテム変換エラー: {}",
-                                e
-                            ))
+                            TodoError::Internal(format!("プロジェクションアイテム変換エラー: {e}"))
                         })?;
 
                     debug!("プロジェクション取得完了: {}", todo_id);
@@ -314,7 +307,7 @@ impl ProjectionRepository {
     ) -> Result<Vec<Todo>, TodoError> {
         info!("アクティブToDo取得中: family_id={}", family_id);
 
-        let gsi1_pk = format!("FAMILY#{}#ACTIVE", family_id);
+        let gsi1_pk = format!("FAMILY#{family_id}#ACTIVE");
 
         retry_dynamodb_operation(
             || async {
@@ -337,15 +330,12 @@ impl ProjectionRepository {
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| {
-                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
-                            })?;
+                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {e}")))?;
 
                         let projection_item = ProjectionItem::from_dynamodb_item(&dynamodb_item)
                             .map_err(|e| {
                                 TodoError::Internal(format!(
-                                    "プロジェクションアイテム変換エラー: {}",
-                                    e
+                                    "プロジェクションアイテム変換エラー: {e}"
                                 ))
                             })?;
 
@@ -369,7 +359,7 @@ impl ProjectionRepository {
     ) -> Result<Vec<Todo>, TodoError> {
         info!("全ToDo取得中: family_id={}", family_id);
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
 
         retry_dynamodb_operation(
             || async {
@@ -395,15 +385,12 @@ impl ProjectionRepository {
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| {
-                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
-                            })?;
+                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {e}")))?;
 
                         let projection_item = ProjectionItem::from_dynamodb_item(&dynamodb_item)
                             .map_err(|e| {
                                 TodoError::Internal(format!(
-                                    "プロジェクションアイテム変換エラー: {}",
-                                    e
+                                    "プロジェクションアイテム変換エラー: {e}"
                                 ))
                             })?;
 
@@ -430,7 +417,7 @@ impl ProjectionRepository {
             family_id, todo_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
@@ -489,7 +476,7 @@ impl SnapshotRepository {
         let snapshot_id = snapshot_item.snapshot_id.clone();
         let dynamodb_item = snapshot_item
             .to_dynamodb_item()
-            .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {}", e)))?;
+            .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {e}")))?;
 
         let attr_map = dynamodb_item.to_attribute_map();
 
@@ -525,7 +512,7 @@ impl SnapshotRepository {
             family_id, todo_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk_prefix = format!("TODO#SNAPSHOT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
@@ -548,14 +535,13 @@ impl SnapshotRepository {
                     if let Some(item) = items.first() {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(item)
                             .map_err(|e| {
-                            TodoError::Internal(format!("アイテム変換エラー: {}", e))
+                            TodoError::Internal(format!("アイテム変換エラー: {e}"))
                         })?;
 
                         let snapshot_item = SnapshotItem::from_dynamodb_item(&dynamodb_item)
                             .map_err(|e| {
                                 TodoError::Internal(format!(
-                                    "スナップショットアイテム変換エラー: {}",
-                                    e
+                                    "スナップショットアイテム変換エラー: {e}",
                                 ))
                             })?;
 
@@ -588,7 +574,7 @@ impl SnapshotRepository {
             family_id, todo_id, keep_count
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk_prefix = format!("TODO#SNAPSHOT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
@@ -661,7 +647,7 @@ impl SnapshotRepository {
             family_id, todo_id, snapshot_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("TODO#SNAPSHOT#{}#{}", todo_id.as_str(), snapshot_id);
 
         retry_dynamodb_operation(

@@ -49,8 +49,8 @@ impl DynamoDbKeys {
     /// イベント用のキーを生成
     pub fn for_event(family_id: &str, event_ulid: &str) -> Self {
         Self {
-            pk: format!("FAMILY#{}", family_id),
-            sk: format!("EVENT#{}", event_ulid),
+            pk: format!("FAMILY#{family_id}"),
+            sk: format!("EVENT#{event_ulid}"),
             gsi1_pk: None,
             gsi1_sk: None,
         }
@@ -59,7 +59,7 @@ impl DynamoDbKeys {
     /// 現在のToDo状態用のキーを生成
     pub fn for_todo_projection(family_id: &str, todo_id: &TodoId) -> Self {
         Self {
-            pk: format!("FAMILY#{}", family_id),
+            pk: format!("FAMILY#{family_id}"),
             sk: format!("TODO#CURRENT#{}", todo_id.as_str()),
             gsi1_pk: None,
             gsi1_sk: None,
@@ -69,9 +69,9 @@ impl DynamoDbKeys {
     /// アクティブなToDo用のGSIキーを生成
     pub fn for_active_todo(family_id: &str, todo_ulid: &str) -> Self {
         Self {
-            pk: format!("FAMILY#{}", family_id),
-            sk: format!("TODO#CURRENT#{}", todo_ulid),
-            gsi1_pk: Some(format!("FAMILY#{}#ACTIVE", family_id)),
+            pk: format!("FAMILY#{family_id}"),
+            sk: format!("TODO#CURRENT#{todo_ulid}"),
+            gsi1_pk: Some(format!("FAMILY#{family_id}#ACTIVE")),
             gsi1_sk: Some(todo_ulid.to_string()),
         }
     }
@@ -79,8 +79,8 @@ impl DynamoDbKeys {
     /// ToDo履歴用のキーを生成
     pub fn for_todo_history(family_id: &str, todo_id: &TodoId, event_ulid: &str) -> Self {
         Self {
-            pk: format!("FAMILY#{}", family_id),
-            sk: format!("TODO#EVENT#{}#{}", todo_id.as_str(), event_ulid),
+            pk: format!("FAMILY#{family_id}"),
+            sk: format!("TODO#EVENT#{}#{event_ulid}", todo_id.as_str()),
             gsi1_pk: None,
             gsi1_sk: None,
         }
@@ -89,8 +89,8 @@ impl DynamoDbKeys {
     /// スナップショット用のキーを生成
     pub fn for_snapshot(family_id: &str, todo_id: &TodoId, snapshot_ulid: &str) -> Self {
         Self {
-            pk: format!("FAMILY#{}", family_id),
-            sk: format!("TODO#SNAPSHOT#{}#{}", todo_id.as_str(), snapshot_ulid),
+            pk: format!("FAMILY#{family_id}"),
+            sk: format!("TODO#SNAPSHOT#{}#{snapshot_ulid}", todo_id.as_str()),
             gsi1_pk: None,
             gsi1_sk: None,
         }
@@ -207,7 +207,7 @@ impl DynamoDbItem {
             .ok_or("Missing Data")?;
 
         let data: serde_json::Value = serde_json::from_str(data_str)
-            .map_err(|e| format!("Failed to parse Data JSON: {}", e))?;
+            .map_err(|e| format!("Failed to parse Data JSON: {e}"))?;
 
         let version = map
             .get("Version")
@@ -272,7 +272,7 @@ impl EventItem {
         let keys = DynamoDbKeys::for_event(&self.family_id, event_ulid);
 
         let data = serde_json::to_value(&self.event)
-            .map_err(|e| format!("Failed to serialize event: {}", e))?;
+            .map_err(|e| format!("Failed to serialize event: {e}"))?;
 
         Ok(DynamoDbItem::new(
             keys,
@@ -290,7 +290,7 @@ impl EventItem {
         }
 
         let event: TodoEvent = serde_json::from_value(item.data.clone())
-            .map_err(|e| format!("Failed to deserialize event: {}", e))?;
+            .map_err(|e| format!("Failed to deserialize event: {e}"))?;
 
         // PKからfamily_idを抽出
         let family_id = item
@@ -334,7 +334,7 @@ impl ProjectionItem {
         };
 
         let data = serde_json::to_value(&self.todo)
-            .map_err(|e| format!("Failed to serialize todo: {}", e))?;
+            .map_err(|e| format!("Failed to serialize todo: {e}"))?;
 
         Ok(DynamoDbItem::new(
             keys,
@@ -352,7 +352,7 @@ impl ProjectionItem {
         }
 
         let todo: Todo = serde_json::from_value(item.data.clone())
-            .map_err(|e| format!("Failed to deserialize todo: {}", e))?;
+            .map_err(|e| format!("Failed to deserialize todo: {e}"))?;
 
         // PKからfamily_idを抽出
         let family_id = item
@@ -406,7 +406,7 @@ impl SnapshotItem {
         let keys = DynamoDbKeys::for_snapshot(&self.family_id, &self.todo_id, &self.snapshot_id);
 
         let data = serde_json::to_value(&self.data)
-            .map_err(|e| format!("Failed to serialize snapshot: {}", e))?;
+            .map_err(|e| format!("Failed to serialize snapshot: {e}"))?;
 
         Ok(DynamoDbItem::new(
             keys,
@@ -424,7 +424,7 @@ impl SnapshotItem {
         }
 
         let data: SnapshotData = serde_json::from_value(item.data.clone())
-            .map_err(|e| format!("Failed to deserialize snapshot: {}", e))?;
+            .map_err(|e| format!("Failed to deserialize snapshot: {e}"))?;
 
         // PKからfamily_idを抽出
         let family_id = item
@@ -440,7 +440,7 @@ impl SnapshotItem {
         }
 
         let todo_id = TodoId::from_string(sk_parts[2].to_string())
-            .map_err(|e| format!("Invalid TodoId in SK: {}", e))?;
+            .map_err(|e| format!("Invalid TodoId in SK: {e}"))?;
         let snapshot_id = sk_parts[3].to_string();
 
         Ok(Self {
