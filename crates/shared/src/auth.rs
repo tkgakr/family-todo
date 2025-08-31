@@ -76,8 +76,7 @@ impl JwtValidator {
         region: &str,
     ) -> Result<Self, anyhow::Error> {
         let jwk_url = format!(
-            "https://cognito-idp.{}.amazonaws.com/{}/.well-known/jwks.json",
-            region, user_pool_id
+            "https://cognito-idp.{region}.amazonaws.com/{user_pool_id}/.well-known/jwks.json"
         );
 
         info!("JWK エンドポイントから公開鍵を取得中: {}", jwk_url);

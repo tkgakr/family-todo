@@ -157,7 +157,7 @@ impl FamilyEventRepository {
     ) -> Result<Vec<FamilyEvent>, DomainError> {
         info!("家族イベントを取得中: family_id={}", family_id);
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
 
         let result = retry_dynamodb_operation(
             || async {
@@ -292,7 +292,7 @@ impl FamilyInvitationRepository {
                     .key_condition_expression("GSI1PK = :pk")
                     .expression_attribute_values(
                         ":pk",
-                        AttributeValue::S(format!("INVITATION#{}", token)),
+                        AttributeValue::S(format!("INVITATION#{token}")),
                     )
                     .send()
                     .await
@@ -331,7 +331,7 @@ impl FamilyInvitationRepository {
     ) -> Result<Vec<FamilyInvitation>, DomainError> {
         info!("家族の招待一覧を取得中: family_id={}", family_id);
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
 
         let result = retry_dynamodb_operation(
             || async {
@@ -381,8 +381,8 @@ impl FamilyInvitationRepository {
     pub async fn delete_invitation(&self, family_id: &str, token: &str) -> Result<(), DomainError> {
         info!("招待を削除中: family_id={}, token={}", family_id, token);
 
-        let pk = format!("FAMILY#{}", family_id);
-        let sk = format!("INVITATION#{}", token);
+        let pk = format!("FAMILY#{family_id}");
+        let sk = format!("INVITATION#{token}");
 
         retry_dynamodb_operation(
             || async {
@@ -431,7 +431,7 @@ impl FamilyMemberRepository {
         );
 
         let record = MemberRecord::from(member);
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
         let sk = format!("MEMBER#{}", record.user_id);
 
         let mut item = HashMap::new();
@@ -490,7 +490,7 @@ impl FamilyMemberRepository {
     ) -> Result<Vec<FamilyMember>, DomainError> {
         info!("家族メンバー一覧を取得中: family_id={}", family_id);
 
-        let pk = format!("FAMILY#{}", family_id);
+        let pk = format!("FAMILY#{family_id}");
 
         let result = retry_dynamodb_operation(
             || async {
@@ -544,8 +544,8 @@ impl FamilyMemberRepository {
             family_id, user_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
-        let sk = format!("MEMBER#{}", user_id);
+        let pk = format!("FAMILY#{family_id}");
+        let sk = format!("MEMBER#{user_id}");
 
         let result = retry_dynamodb_operation(
             || async {
@@ -588,8 +588,8 @@ impl FamilyMemberRepository {
             family_id, user_id
         );
 
-        let pk = format!("FAMILY#{}", family_id);
-        let sk = format!("MEMBER#{}", user_id);
+        let pk = format!("FAMILY#{family_id}");
+        let sk = format!("MEMBER#{user_id}");
 
         retry_dynamodb_operation(
             || async {

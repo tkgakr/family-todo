@@ -89,7 +89,6 @@ Resources:
       AutoVerifiedAttributes:
         - email
       MfaConfiguration: "OPTIONAL"
-      MfaConfigurationStatus: "ENABLED"
       EnabledMfas:
         - SOFTWARE_TOKEN_MFA
         - SMS_MFA

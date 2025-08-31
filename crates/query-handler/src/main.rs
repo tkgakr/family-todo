@@ -489,9 +489,7 @@ async fn main() -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use anyhow::Result;
-    use serde_json::json;
     use std::collections::HashMap;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -507,6 +505,7 @@ mod tests {
 
     /// テスト用の API Gateway リクエスト構造体
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct TestApiGatewayRequest {
         http_method: String,
         path: String,
@@ -521,6 +520,7 @@ mod tests {
 
     /// テスト用のクレーム構造体
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     struct TestClaims {
         sub: String,
         email: String,
@@ -564,7 +564,7 @@ mod tests {
     fn create_test_request(
         method: &str,
         path: &str,
-        query_params: Option<HashMap<String, String>>,
+        _query_params: Option<HashMap<String, String>>,
         authorizer: Option<TestAuthorizer>,
     ) -> TestApiGatewayRequest {
         TestApiGatewayRequest {

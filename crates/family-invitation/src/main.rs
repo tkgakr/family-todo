@@ -62,6 +62,7 @@ struct AppState {
     cognito_client: CognitoClient,
     ses_client: SesClient,
     jwt_validator: JwtValidator,
+    #[allow(dead_code)]
     config: Config,
 }
 
@@ -144,10 +145,7 @@ async fn handle_request(
         Ok(resp) => Ok(resp),
         Err(e) => {
             error!("Request handling error: {}", e);
-            Ok(create_response(
-                500,
-                &format!("Internal Server Error: {}", e),
-            ))
+            Ok(create_response(500, &format!("Internal Server Error: {e}")))
         }
     }
 }

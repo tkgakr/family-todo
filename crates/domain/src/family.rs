@@ -103,8 +103,7 @@ impl FamilyRole {
             "admin" => Ok(FamilyRole::Admin),
             "member" => Ok(FamilyRole::Member),
             _ => Err(DomainError::InvalidFamilyRole(format!(
-                "Invalid role: {}",
-                role
+                "Invalid role: {role}"
             ))),
         }
     }
