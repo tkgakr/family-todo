@@ -2,7 +2,7 @@
 
 ## ルートディレクトリレイアウト
 
-```
+```text
 ├── crates/                 # Rustワークスペース - すべてのバックエンドコード
 ├── frontend/              # Reactフロントエンドアプリケーション
 ├── .github/workflows/     # CI/CDパイプライン定義
@@ -67,7 +67,7 @@
 
 ## フロントエンド構造
 
-```
+```text
 frontend/
 ├── src/
 │   ├── components/        # 再利用可能なUIコンポーネント
