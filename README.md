@@ -9,26 +9,33 @@ AWS サーバーレス環境で動作する家族向け ToDo 共有アプリケ�
 ## 主な技術要素
 
 - **バックエンド**: Rust + AWS Lambda
-- **フロントエンド**: React/TypeScript + Vite + Tailwind CSS
+- **フロントエンド**: React/TypeScript + Vite + Tailwind CSS + Biome
 - **データベース**: Amazon DynamoDB (Single Table Design)
-- **認証**: Amazon Cognito (Passkey対応予定)
+- **認証**: Amazon Cognito User Pool + JWT
 - **インフラ**: AWS SAM
-- **CI/CD**: GitHub Actions
+- **CI/CD**: GitHub Actions (準備中)
 - **アーキテクチャ**: イベントソーシング + CQRS
+- **識別子**: ULID (時系列ソート可能)
+- **監視**: AWS X-Ray + CloudWatch
 
 ## プロジェクト構成
 
 ```
-/
+family-todo-claude/
 ├── backend/               # Rust Lambda 関数群
-│   ├── shared/           # 共通ドメインモデル
-│   ├── command-handler/  # 書き込み処理
-│   ├── query-handler/    # 読み取り処理
-│   └── event-processor/  # イベントストリーム処理
+│   ├── shared/           # 共通ドメインモデル・インフラ層
+│   ├── command-handler/  # 書き込み処理 Lambda
+│   ├── query-handler/    # 読み取り処理 Lambda
+│   └── event-processor/  # イベント処理 Lambda
 ├── frontend/             # React/TypeScript SPA
-├── infra/                # SAM テンプレート
-├── tests/                # 統合テスト
-└── docs/                 # ドキュメント
+├── infra/                # AWS SAM テンプレート
+├── tests/                # 統合テスト (準備中)
+├── docs/                 # ドキュメント
+│   ├── api/              # API ドキュメント
+│   ├── architecture/     # アーキテクチャ設計書
+│   ├── DEVELOPMENT.md    # 開発ガイド
+│   └── DEPLOYMENT.md     # デプロイガイド
+└── env.json              # ローカル環境変数
 ```
 
 ## セットアップ
@@ -45,48 +52,65 @@ AWS サーバーレス環境で動作する家族向け ToDo 共有アプリケ�
 
 1. **リポジトリのクローン**
 ```bash
-git clone <repository-url>
+git clone https://github.com/your-org/family-todo-claude.git
 cd family-todo-claude
 ```
 
-2. **ローカル開発環境の起動**
+2. **バックエンドの起動**
 ```bash
-make dev-up
+# SAM でローカル API を起動
+sam build --use-container
+sam local start-api --warm-containers EAGER --port 3001 --env-vars env.json
 ```
 
-これにより以下が起動されます：
-- DynamoDB Local
-- LocalStack (Cognito, SES, SQS)
-- フロントエンド開発サーバー
-- バックエンドのウォッチモード
-
-3. **開発環境の停止**
+3. **フロントエンドの起動**
 ```bash
-make dev-down
+cd frontend
+npm install
+npm run dev
+```
+
+4. **DynamoDB Local の起動** (オプション)
+```bash
+docker run -p 8000:8000 amazon/dynamodb-local:latest \
+  -jar DynamoDBLocal.jar -sharedDb -inMemory
 ```
 
 ### AWS デプロイ
 
-1. **依存関係のインストールとビルド**
-```bash
-make build
-```
-
-2. **AWSへのデプロイ**
+1. **初回デプロイ**
 ```bash
 cd infra
 sam deploy --guided
 ```
 
+2. **更新デプロイ**
+```bash
+sam deploy
+```
+
+詳細は [デプロイガイド](docs/DEPLOYMENT.md) を参照してください。
+
 ## 主な機能
 
+### 実装済み
 - ✅ ToDo の作成・更新・完了・削除
 - ✅ 家族間でのToDo共有
-- ✅ イベント履歴の追跡
-- ✅ リアルタイムな状態同期
-- ✅ モバイルフレンドリーなUI
-- ⬜ Passkey認証 (実装予定)
-- ⬜ プッシュ通知 (実装予定)
+- ✅ イベント履歴の追跡と再生
+- ✅ ULID ベースの識別子管理
+- ✅ イベントソーシング + CQRS アーキテクチャ
+- ✅ DynamoDB Single Table Design
+- ✅ レスポンシブな UI (React + Tailwind CSS)
+- ✅ AWS SAM によるインフラ管理
+- ✅ CloudWatch + X-Ray 監視
+
+### 開発予定
+- ⬜ WebAuthn (Passkey) 認証
+- ⬜ リアルタイム同期 (WebSocket)
+- ⬜ プッシュ通知
+- ⬜ ファイル添付機能
+- ⬜ 楽観的ロック実装
+- ⬜ スナップショット機能
 
 ## API仕様
 
@@ -112,26 +136,22 @@ sam deploy --guided
 
 ## テスト
 
-### 単体テスト
+### Rust (バックエンド)
 ```bash
-make test-unit
+cd backend
+cargo test
 ```
 
-### 統合テスト
+### TypeScript (フロントエンド)
 ```bash
-make test-integration
+cd frontend
+npm test
 ```
 
-### スモークテスト
+### 統合テスト (準備中)
 ```bash
 cd tests
-npm run smoke-test
-```
-
-### 負荷テスト
-```bash
-cd tests/load
-k6 run k6-script.js
+npm run test:integration
 ```
 
 ## アーキテクチャの特徴
@@ -180,21 +200,36 @@ FAMILY#{familyId}#ACTIVE | {todoId}           | アクティブToDo一覧(GSI1)
 
 ## 開発コマンド
 
+### Rust (バックエンド)
 ```bash
-# コードフォーマット
-make fmt
+cd backend
 
-# リンター実行
-make lint
+# フォーマット
+cargo fmt
 
-# 全テスト実行
-make test
+# リンター
+cargo clippy -- -D warnings
 
-# ローカルAPIサーバー起動
-make deploy-local
+# セキュリティ監査
+cargo audit
 
-# ヘルプ表示
-make help
+# テスト
+cargo test
+```
+
+### TypeScript (フロントエンド)
+```bash
+cd frontend
+
+# Biome によるフォーマット・リント
+npm run format
+npm run lint
+
+# テスト
+npm test
+
+# ビルド
+npm run build
 ```
 
 ## ライセンス
@@ -205,6 +240,21 @@ MIT License
 
 プルリクエストやイシュー報告を歓迎します。
 
-## 設計ドキュメント
+## ドキュメント
 
-詳細なアーキテクチャ設計は [docs/architecture/PLANNING.md](docs/architecture/PLANNING.md) を参照してください。
+- 📖 **[開発ガイド](docs/DEVELOPMENT.md)**: 開発環境のセットアップと実装方法
+- 🚀 **[デプロイガイド](docs/DEPLOYMENT.md)**: AWS へのデプロイ手順と運用方法
+- 🏗️ **[アーキテクチャ概要](docs/architecture/OVERVIEW.md)**: システム全体の設計思想
+- 📋 **[詳細設計書](docs/architecture/PLANNING.md)**: 包括的なアーキテクチャ仕様
+- 🔌 **[API ドキュメント](docs/api/README.md)**: REST API の仕様書
+
+## 学習目的
+
+このプロジェクトは以下の技術要素の学習を目的としています：
+
+- **イベントソーシング + CQRS**: 大規模システムでの状態管理パターン
+- **AWS サーバーレス**: Lambda, DynamoDB, API Gateway の実践的活用
+- **Rust**: システムプログラミングでの型安全性とパフォーマンス
+- **Single Table Design**: NoSQL データベースの効率的な設計
+- **ULID**: 分散システムでの識別子管理
+- **可観測性**: CloudWatch + X-Ray による包括的な監視
