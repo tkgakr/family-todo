@@ -7,13 +7,13 @@ export default function TodoDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   
-  const { data: todo, isLoading: todoLoading } = useTodo(id!)
-  const { data: history, isLoading: historyLoading } = useTodoHistory(id!)
+  const { data: todo, isLoading: todoLoading } = useTodo(id || '')
+  const { data: history, isLoading: historyLoading } = useTodoHistory(id || '')
 
   if (todoLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
       </div>
     )
   }
@@ -30,6 +30,7 @@ export default function TodoDetail() {
     <div>
       <div className="mb-6">
         <button
+          type="button"
           onClick={() => navigate('/')}
           className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
         >
@@ -112,14 +113,14 @@ export default function TodoDetail() {
         
         {historyLoading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
           </div>
         ) : (
           <div className="space-y-4">
-            {history?.events.map((event, index) => (
+            {history?.events.map((event, _index) => (
               <div key={event.event_id} className="flex items-start space-x-3">
                 <div className="flex-shrink-0">
-                  <div className="w-2 h-2 bg-primary-600 rounded-full mt-2"></div>
+                  <div className="w-2 h-2 bg-primary-600 rounded-full mt-2" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">

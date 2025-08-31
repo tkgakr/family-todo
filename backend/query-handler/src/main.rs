@@ -19,8 +19,8 @@ async fn function_handler(
     span.record("function_name", &context.env_config.function_name);
 
     info!(
-        method = %request.http_method,
-        path = %request.path,
+        method = ?request.http_method,
+        path = ?request.path,
         request_id = %context.request_id,
         "Processing query request"
     );
@@ -50,11 +50,11 @@ async fn function_handler(
                 status_code: 500,
                 headers: Default::default(),
                 multi_value_headers: Default::default(),
-                body: Some(serde_json::json!({
+                body: Some(aws_lambda_events::encodings::Body::Text(serde_json::json!({
                     "error": "Internal server error",
                     "request_id": context.request_id
-                }).to_string()),
-                is_base64_encoded: Some(false),
+                }).to_string())),
+                is_base64_encoded: false,
             };
             Ok(error_response)
         }

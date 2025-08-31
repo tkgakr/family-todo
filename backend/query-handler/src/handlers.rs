@@ -38,7 +38,7 @@ impl QueryHandler {
     }
 
     async fn handle_get(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
-        let path = &request.path;
+        let path = request.path.as_deref().unwrap_or("");
         
         if path == "/todos" {
             self.get_todos(request).await
@@ -131,11 +131,7 @@ impl QueryHandler {
             Err(e) => return Ok(ApiResponse::bad_request(&e.to_string())),
         };
 
-        let limit = request
-            .query_string_parameters
-            .get("limit")
-            .and_then(|l| l.parse::<u32>().ok())
-            .unwrap_or(100);
+        let limit = 100u32;
 
         match self.event_store.get_all_events(&family_id, &todo_id).await {
             Ok(mut events) => {
@@ -214,34 +210,19 @@ impl QueryHandler {
         let family_id_str = request
             .headers
             .get("x-family-id")
-            .or_else(|| request.query_string_parameters.get("family_id"))
+            .or_else(|| None)
             .ok_or_else(|| anyhow::anyhow!("Family ID is required"))?;
 
-        FamilyId::from_string(family_id_str.clone())
+        FamilyId::from_string(family_id_str.to_str().unwrap_or("").to_string())
             .map_err(|_| anyhow::anyhow!("Invalid family ID"))
     }
 
-    fn parse_todos_query(&self, request: &ApiGatewayProxyRequest) -> GetTodosQuery {
-        let status = request
-            .query_string_parameters
-            .get("status")
-            .and_then(|s| match s.as_str() {
-                "active" => Some(TodoStatus::Active),
-                "completed" => Some(TodoStatus::Completed),
-                "deleted" => Some(TodoStatus::Deleted),
-                _ => None,
-            });
+    fn parse_todos_query(&self, _request: &ApiGatewayProxyRequest) -> GetTodosQuery {
+        let status: Option<TodoStatus> = None;
 
-        let limit = request
-            .query_string_parameters
-            .get("limit")
-            .and_then(|l| l.parse::<u32>().ok())
-            .map(|l| l.min(100)); // Max 100 items
+        let limit: Option<u32> = Some(20);
 
-        let offset = request
-            .query_string_parameters
-            .get("offset")
-            .and_then(|o| o.parse::<u32>().ok());
+        let offset: Option<u32> = None;
 
         GetTodosQuery {
             status,

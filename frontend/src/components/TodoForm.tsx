@@ -36,6 +36,7 @@ export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProp
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-lg font-semibold text-gray-900">新しいToDo</h2>
           <button
+            type="button"
             onClick={onCancel}
             className="text-gray-400 hover:text-gray-600"
           >

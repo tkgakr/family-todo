@@ -30,8 +30,7 @@ impl StreamProcessor {
         let mut failures = BatchItemFailures::new();
         
         for record in records {
-            let sequence_number = record.event_sequence_number.clone()
-                .unwrap_or_else(|| "unknown".to_string());
+            let sequence_number = record.event_id.clone().unwrap_or_else(|| "unknown".to_string());
             
             match self.process_record(&record).await {
                 Ok(_) => {
@@ -68,17 +67,15 @@ impl StreamProcessor {
     #[instrument(skip(self, record))]
     async fn process_record(&self, record: &DynamoDbEventRecord) -> Result<()> {
         // Only process INSERT events (new items)
-        if record.event_name.as_ref().map(|s| s.as_str()) != Some("INSERT") {
+        if record.event_name.as_ref() != Some("INSERT") {
             return Ok(());
         }
 
         // Extract DynamoDB record
-        let dynamodb_record = record.dynamodb.as_ref()
-            .ok_or_else(|| anyhow!("No DynamoDB record found"))?;
+        let dynamodb_record = &record.change;
 
         // Check if this is an event record
-        let new_image = dynamodb_record.new_image.as_ref()
-            .ok_or_else(|| anyhow!("No new image found"))?;
+        let new_image = &dynamodb_record.new_image;
         
         let entity_type = new_image
             .get("EntityType")
@@ -122,7 +119,7 @@ impl StreamProcessor {
         // In a real implementation, we would send the failed record to a DLQ
         // For now, we just log it
         error!(
-            sequence_number = record.event_sequence_number.as_deref().unwrap_or("unknown"),
+            sequence_number = record.event_id.as_ref().unwrap_or("unknown"),
             error = %error,
             record = ?record,
             "Sending record to DLQ"

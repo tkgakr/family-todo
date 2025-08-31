@@ -3,16 +3,16 @@ use aws_lambda_events::event::apigw::{ApiGatewayProxyRequest, ApiGatewayProxyRes
 use chrono::Utc;
 use shared::{
     domain::{
-        aggregates::{Todo, TodoUpdates},
+        aggregates::Todo,
         events::TodoEvent,
         identifiers::{TodoId, UserId, FamilyId, EventId},
-        error::{DomainError, UpdateError},
+        error::DomainError,
     },
     infra::EventStore,
 };
-use tracing::{info, warn, error, instrument};
+use tracing::{info, error, instrument};
 
-use crate::commands::{CreateTodoCommand, UpdateTodoCommand, CompleteTodoCommand, DeleteTodoCommand};
+use crate::commands::{CreateTodoCommand, UpdateTodoCommand, DeleteTodoCommand};
 use crate::responses::ApiResponse;
 
 pub struct CommandHandler {
@@ -45,7 +45,7 @@ impl CommandHandler {
     }
 
     async fn handle_post(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
-        let path = &request.path;
+        let path = request.path.as_deref().unwrap_or("");
         
         if path == "/todos" {
             self.create_todo(request).await
@@ -57,7 +57,7 @@ impl CommandHandler {
     }
 
     async fn handle_put(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
-        if let Some(todo_id) = self.extract_todo_id_from_path(&request.path) {
+        if let Some(todo_id) = self.extract_todo_id_from_path(request.path.as_deref().unwrap_or("")) {
             self.update_todo(todo_id, request).await
         } else {
             Ok(ApiResponse::not_found("Todo not found"))
@@ -65,7 +65,7 @@ impl CommandHandler {
     }
 
     async fn handle_delete(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
-        if let Some(todo_id) = self.extract_todo_id_from_path(&request.path) {
+        if let Some(todo_id) = self.extract_todo_id_from_path(request.path.as_deref().unwrap_or("")) {
             self.delete_todo(todo_id, request).await
         } else {
             Ok(ApiResponse::not_found("Todo not found"))
@@ -134,7 +134,7 @@ impl CommandHandler {
             None => return Ok(ApiResponse::bad_request("Request body is required")),
         };
 
-        let command: UpdateTodoCommand = match serde_json::from_str(body) {
+        let command: UpdateTodoCommand = match serde_json::from_str::<UpdateTodoCommand>(body) {
             Ok(mut cmd) => {
                 cmd.todo_id = todo_id.clone();
                 cmd
@@ -285,22 +285,18 @@ impl CommandHandler {
         let family_id_str = request
             .headers
             .get("x-family-id")
-            .or_else(|| request.query_string_parameters.get("family_id"))
+            .or_else(|| None)
             .ok_or_else(|| anyhow::anyhow!("Family ID is required"))?;
 
-        FamilyId::from_string(family_id_str.clone())
+        FamilyId::from_string(family_id_str.to_str().unwrap_or("").to_string())
             .map_err(|_| anyhow::anyhow!("Invalid family ID"))
     }
 
     fn extract_user_id(&self, request: &ApiGatewayProxyRequest) -> Result<UserId> {
-        let user_id_str = request
-            .request_context
-            .authorizer
-            .get("sub")
-            .or_else(|| request.headers.get("x-user-id"))
+        let user_id_str = request.headers.get("x-user-id")
             .ok_or_else(|| anyhow::anyhow!("User ID is required"))?;
 
-        UserId::from_string(user_id_str.clone())
+        UserId::from_string(user_id_str.to_str().unwrap_or("").to_string())
             .map_err(|_| anyhow::anyhow!("Invalid user ID"))
     }
 

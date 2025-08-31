@@ -15,21 +15,23 @@ export default function Settings() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-2">
                 表示名
               </label>
               <input
                 type="text"
+                id="displayName"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="表示名を入力"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 メールアドレス
               </label>
               <input
                 type="email"
+                id="email"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 placeholder="email@example.com"
                 disabled
@@ -38,7 +40,7 @@ export default function Settings() {
           </div>
           
           <div className="mt-4">
-            <button className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
+            <button type="button" className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
               プロフィールを更新
             </button>
           </div>
@@ -70,7 +72,7 @@ export default function Settings() {
           </div>
           
           <div className="mt-4">
-            <button className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
+            <button type="button" className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
               メンバーを招待
             </button>
           </div>
@@ -91,7 +93,7 @@ export default function Settings() {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600" />
               </label>
             </div>
             
@@ -102,7 +104,7 @@ export default function Settings() {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" defaultChecked />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600" />
               </label>
             </div>
           </div>
@@ -117,17 +119,17 @@ export default function Settings() {
           
           <div className="space-y-4">
             <div>
-              <button className="text-primary-600 hover:text-primary-700 font-medium">
+              <button type="button" className="text-primary-600 hover:text-primary-700 font-medium">
                 パスワードを変更
               </button>
             </div>
             <div>
-              <button className="text-primary-600 hover:text-primary-700 font-medium">
+              <button type="button" className="text-primary-600 hover:text-primary-700 font-medium">
                 二要素認証を設定
               </button>
             </div>
             <div>
-              <button className="text-red-600 hover:text-red-700 font-medium">
+              <button type="button" className="text-red-600 hover:text-red-700 font-medium">
                 アカウントを削除
               </button>
             </div>

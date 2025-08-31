@@ -43,7 +43,7 @@ export default function TodoList() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
       </div>
     )
   }
@@ -63,6 +63,7 @@ export default function TodoList() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">ToDo一覧</h1>
         <button
+          type="button"
           onClick={() => setShowForm(true)}
           className="bg-primary-600 text-white px-4 py-2 rounded-md flex items-center space-x-2 hover:bg-primary-700 transition-colors"
         >
@@ -78,6 +79,7 @@ export default function TodoList() {
           { status: TodoStatus.Completed, label: '完了済み', icon: Check },
         ].map(({ status, label, icon: Icon }) => (
           <button
+            type="button"
             key={status}
             onClick={() => setActiveTab(status)}
             className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors ${
@@ -140,6 +142,7 @@ export default function TodoList() {
                   {todo.status === TodoStatus.Active && (
                     <>
                       <button
+                        type="button"
                         onClick={() => handleCompleteTodo(todo.id)}
                         disabled={completeTodoMutation.isPending}
                         className="p-2 text-green-600 hover:bg-green-50 rounded-md transition-colors"
@@ -148,6 +151,7 @@ export default function TodoList() {
                         <Check className="h-4 w-4" />
                       </button>
                       <button
+                        type="button"
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                         title="編集"
                       >
@@ -156,6 +160,7 @@ export default function TodoList() {
                     </>
                   )}
                   <button
+                    type="button"
                     onClick={() => handleDeleteTodo(todo.id)}
                     disabled={deleteTodoMutation.isPending}
                     className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"

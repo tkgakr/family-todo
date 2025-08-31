@@ -1,6 +1,7 @@
 use aws_lambda_events::event::apigw::ApiGatewayProxyResponse;
+use aws_lambda_events::encodings::Body;
+use aws_lambda_events::http::HeaderMap;
 use serde_json;
-use std::collections::HashMap;
 
 pub struct ApiResponse;
 
@@ -11,9 +12,9 @@ impl ApiResponse {
         ApiGatewayProxyResponse {
             status_code,
             headers,
-            multi_value_headers: HashMap::new(),
-            body: Some(serde_json::to_string(&data).unwrap_or_default()),
-            is_base64_encoded: Some(false),
+            multi_value_headers: HeaderMap::new(),
+            body: Some(Body::Text(serde_json::to_string(&data).unwrap_or_default())),
+            is_base64_encoded: false,
         }
     }
 
@@ -46,19 +47,13 @@ impl ApiResponse {
         ApiGatewayProxyResponse {
             status_code,
             headers,
-            multi_value_headers: HashMap::new(),
-            body: Some(error_body.to_string()),
-            is_base64_encoded: Some(false),
+            multi_value_headers: HeaderMap::new(),
+            body: Some(Body::Text(error_body.to_string())),
+            is_base64_encoded: false,
         }
     }
 
-    fn default_headers() -> HashMap<String, String> {
-        let mut headers = HashMap::new();
-        headers.insert("Content-Type".to_string(), "application/json".to_string());
-        headers.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
-        headers.insert("Access-Control-Allow-Headers".to_string(), "Content-Type,Authorization".to_string());
-        headers.insert("Access-Control-Allow-Methods".to_string(), "GET,POST,PUT,DELETE,OPTIONS".to_string());
-        headers.insert("Cache-Control".to_string(), "public, max-age=60".to_string());
-        headers
+    fn default_headers() -> HeaderMap {
+        HeaderMap::new()
     }
 }

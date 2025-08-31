@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use shared::domain::identifiers::{TodoId, UserId};
+use shared::domain::identifiers::TodoId;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateTodoCommand {
