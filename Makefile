@@ -33,7 +33,11 @@ install-deps: ## Install all dependencies
 lambda-build: ## Build Lambda functions
 	cargo lambda build --release --output-format zip
 	mkdir -p target/lambda/family-invitation
+	mkdir -p target/lambda/lambda-authorizer
+	mkdir -p target/lambda/token-refresh
 	cp target/lambda/family-invitation/bootstrap target/lambda/family-invitation/
+	cp target/lambda/lambda-authorizer/bootstrap target/lambda/lambda-authorizer/
+	cp target/lambda/token-refresh/bootstrap target/lambda/token-refresh/
 
 sam-local: ## Start SAM local API
 	sam local start-api --port 8080 --env-vars local-env.json

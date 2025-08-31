@@ -235,10 +235,129 @@ Resources:
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
       Auth:
-        DefaultAuthorizer: CognitoAuthorizer
+        DefaultAuthorizer: LambdaTokenAuthorizer
         Authorizers:
+          # Cognito JWT Authorizer（基本認証用）
           CognitoAuthorizer:
             UserPoolArn: !GetAtt FamilyTodoUserPool.Arn
+            AuthorizationScopes:
+              - email
+              - openid
+              - profile
+          # Lambda Token Authorizer（追加認証ロジック用）
+          LambdaTokenAuthorizer:
+            FunctionArn: !GetAtt LambdaAuthorizerFunction.Arn
+            AuthorizerResultTtlInSeconds: 300
+            IdentitySource: method.request.header.Authorization
+      # JWT 設定の追加
+      DefinitionBody:
+        openapi: "3.0.1"
+        info:
+          title: !Sub "family-todo-api-${Environment}"
+          version: "1.0"
+        paths:
+          /commands/{proxy+}:
+            x-amazon-apigateway-any-method:
+              security:
+                - LambdaTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommandHandlerFunction.Arn}/invocations"
+          /queries/{proxy+}:
+            x-amazon-apigateway-any-method:
+              security:
+                - LambdaTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${QueryHandlerFunction.Arn}/invocations"
+          /family/{proxy+}:
+            x-amazon-apigateway-any-method:
+              security:
+                - LambdaTokenAuthorizer: []
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${FamilyInvitationFunction.Arn}/invocations"
+          /auth/refresh:
+            post:
+              security: [] # リフレッシュエンドポイントは認証不要
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${TokenRefreshFunction.Arn}/invocations"
+        components:
+          securitySchemes:
+            LambdaTokenAuthorizer:
+              type: apiKey
+              name: Authorization
+              in: header
+              x-amazon-apigateway-authorizer:
+                type: token
+                authorizerUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaAuthorizerFunction.Arn}/invocations"
+                authorizerResultTtlInSeconds: 300
+                identitySource: method.request.header.Authorization
+
+  # Lambda Authorizer Function
+  LambdaAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-lambda-authorizer-${Environment}"
+      CodeUri: target/lambda/lambda-authorizer/
+      Handler: bootstrap
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref FamilyTodoUserPool
+          COGNITO_CLIENT_ID: !Ref FamilyTodoUserPoolClient
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:GetUser
+                - cognito-idp:DescribeUserPool
+                - cognito-idp:DescribeUserPoolClient
+              Resource: !GetAtt FamilyTodoUserPool.Arn
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
+
+  # Token Refresh Function
+  TokenRefreshFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-token-refresh-${Environment}"
+      CodeUri: target/lambda/token-refresh/
+      Handler: bootstrap
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref FamilyTodoUserPool
+          COGNITO_CLIENT_ID: !Ref FamilyTodoUserPoolClient
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FamilyTodoApi
+            Path: /auth/refresh
+            Method: POST
+            Auth:
+              Authorizer: NONE
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:InitiateAuth
+                - cognito-idp:RespondToAuthChallenge
+              Resource: !GetAtt FamilyTodoUserPool.Arn
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
 
   # Lambda Functions
   CommandHandlerFunction:
@@ -439,6 +558,35 @@ Resources:
     Properties:
       LogGroupName: !Sub "/aws/lambda/family-todo-invitation-handler-${Environment}"
       RetentionInDays: 14
+
+  LambdaAuthorizerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-lambda-authorizer-${Environment}"
+      RetentionInDays: 14
+
+  TokenRefreshLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-token-refresh-${Environment}"
+      RetentionInDays: 14
+
+  # API Gateway Lambda Permissions
+  LambdaAuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaAuthorizerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${FamilyTodoApi}/authorizers/*"
+
+  TokenRefreshInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref TokenRefreshFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${FamilyTodoApi}/*/*"
 
   # CloudWatch Alarms for Monitoring
   ApiGateway4xxAlarm:

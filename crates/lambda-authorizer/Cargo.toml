@@ -1,0 +1,22 @@
+[package]
+name = "lambda-authorizer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lambda_runtime = "0.8"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+aws-config = "1.0"
+aws-sdk-cognitoidentityprovider = "1.0"
+jsonwebtoken = "9.0"
+reqwest = { version = "0.11", features = ["json"] }
+base64 = "0.21"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# ワークスペース内の共通クレート
+shared = { path = "../shared" }
