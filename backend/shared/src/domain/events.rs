@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
+use crate::domain::identifiers::{EventId, TodoId, UserId};
 use chrono::{DateTime, Utc};
-use crate::domain::identifiers::{TodoId, UserId, EventId};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "event_type", rename_all = "snake_case")]

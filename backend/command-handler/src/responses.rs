@@ -1,5 +1,5 @@
-use aws_lambda_events::event::apigw::ApiGatewayProxyResponse;
 use aws_lambda_events::encodings::Body;
+use aws_lambda_events::event::apigw::ApiGatewayProxyResponse;
 use aws_lambda_events::http::HeaderMap;
 use shared::domain::aggregates::Todo;
 
@@ -8,7 +8,7 @@ pub struct ApiResponse;
 impl ApiResponse {
     pub fn success<T: serde::Serialize>(data: T, status_code: i64) -> ApiGatewayProxyResponse {
         let headers = Self::default_headers();
-        
+
         ApiGatewayProxyResponse {
             status_code,
             headers,
@@ -28,7 +28,7 @@ impl ApiResponse {
 
     pub fn no_content() -> ApiGatewayProxyResponse {
         let headers = Self::default_headers();
-        
+
         ApiGatewayProxyResponse {
             status_code: 204,
             headers,
@@ -57,7 +57,7 @@ impl ApiResponse {
 
     fn error(status_code: i64, error_type: &str, message: &str) -> ApiGatewayProxyResponse {
         let headers = Self::default_headers();
-        
+
         let error_body = serde_json::json!({
             "error": {
                 "type": error_type,

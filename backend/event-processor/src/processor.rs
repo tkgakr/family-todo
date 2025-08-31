@@ -1,9 +1,9 @@
 use anyhow::Result;
 use aws_lambda_events::event::dynamodb::EventRecord as DynamoDbEventRecord;
 use shared::infra::EventProcessor;
-use tracing::{error, info, warn, instrument};
+use tracing::{error, info, instrument, warn};
 
-use crate::error_handling::{BatchItemFailures, is_retryable_error};
+use crate::error_handling::{is_retryable_error, BatchItemFailures};
 
 pub struct StreamProcessor {
     #[allow(dead_code)]
@@ -23,10 +23,10 @@ impl StreamProcessor {
         records: Vec<DynamoDbEventRecord>,
     ) -> Result<BatchItemFailures> {
         let mut failures = BatchItemFailures::new();
-        
+
         for record in records {
             let sequence_number = record.event_id.clone();
-            
+
             match self.process_record(&record).await {
                 Ok(_) => {
                     info!(
@@ -55,7 +55,7 @@ impl StreamProcessor {
                 }
             }
         }
-        
+
         Ok(failures)
     }
 
@@ -71,13 +71,13 @@ impl StreamProcessor {
         // 1. Using aws-sdk-dynamodb types
         // 2. Implementing custom AttributeValue deserialization
         // 3. Converting the record to a simpler format
-        
+
         // Placeholder implementation - in real scenario we would:
         // - Extract EntityType from new_image
         // - Check if it's an Event
         // - Extract Data and PK fields
         // - Parse the event and process it
-        
+
         info!("DynamoDB record processing skipped - AttributeValue handling needs implementation");
 
         Ok(())
@@ -100,7 +100,7 @@ impl StreamProcessor {
         //     "timestamp": chrono::Utc::now().to_rfc3339(),
         //     "retry_count": 0
         // });
-        // 
+        //
         // sqs_client.send_message()
         //     .queue_url(&dlq_url)
         //     .message_body(dlq_message.to_string())

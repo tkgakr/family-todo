@@ -29,22 +29,22 @@ pub struct BatchItemFailure {
 
 pub fn is_retryable_error(error: &anyhow::Error) -> bool {
     let error_string = error.to_string().to_lowercase();
-    
+
     // Check for retryable errors
-    error_string.contains("throttling") ||
-    error_string.contains("service unavailable") ||
-    error_string.contains("internal server error") ||
-    error_string.contains("timeout") ||
-    error_string.contains("connection") ||
-    error_string.contains("network")
+    error_string.contains("throttling")
+        || error_string.contains("service unavailable")
+        || error_string.contains("internal server error")
+        || error_string.contains("timeout")
+        || error_string.contains("connection")
+        || error_string.contains("network")
 }
 
 #[allow(dead_code)]
 pub fn is_retryable(error: &ProcessError) -> bool {
     matches!(
         error,
-        ProcessError::TemporaryFailure(_) |
-        ProcessError::ThrottlingException(_) |
-        ProcessError::ServiceUnavailable(_)
+        ProcessError::TemporaryFailure(_)
+            | ProcessError::ThrottlingException(_)
+            | ProcessError::ServiceUnavailable(_)
     )
 }

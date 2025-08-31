@@ -1,10 +1,10 @@
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use crate::domain::{
-    identifiers::{TodoId, UserId},
-    events::TodoEvent,
     error::{DomainError, DomainResult},
+    events::TodoEvent,
+    identifiers::{TodoId, UserId},
 };
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum TodoStatus {
@@ -37,27 +37,37 @@ impl Todo {
         created_by: UserId,
     ) -> DomainResult<Self> {
         if title.trim().is_empty() {
-            return Err(DomainError::ValidationError("Title cannot be empty".to_string()));
+            return Err(DomainError::ValidationError(
+                "Title cannot be empty".to_string(),
+            ));
         }
-        
+
         if title.len() > 200 {
-            return Err(DomainError::ValidationError("Title too long (max 200 characters)".to_string()));
+            return Err(DomainError::ValidationError(
+                "Title too long (max 200 characters)".to_string(),
+            ));
         }
 
         if let Some(ref desc) = description {
             if desc.len() > 1000 {
-                return Err(DomainError::ValidationError("Description too long (max 1000 characters)".to_string()));
+                return Err(DomainError::ValidationError(
+                    "Description too long (max 1000 characters)".to_string(),
+                ));
             }
         }
 
         if tags.len() > 10 {
-            return Err(DomainError::ValidationError("Too many tags (max 10)".to_string()));
+            return Err(DomainError::ValidationError(
+                "Too many tags (max 10)".to_string(),
+            ));
         }
 
         Ok(Self {
             id,
             title: title.trim().to_string(),
-            description: description.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()),
+            description: description
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty()),
             tags,
             status: TodoStatus::Active,
             created_by,

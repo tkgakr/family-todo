@@ -1,5 +1,5 @@
-mod handlers;
 mod commands;
+mod handlers;
 mod responses;
 
 use aws_lambda_events::event::apigw::{ApiGatewayProxyRequest, ApiGatewayProxyResponse};
@@ -13,7 +13,7 @@ async fn function_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
     let (request, context) = event.into_parts();
-    
+
     let span = tracing::Span::current();
     span.record("request_id", &context.request_id);
     span.record("function_name", &context.env_config.function_name);
@@ -25,9 +25,8 @@ async fn function_handler(
         "Processing command request"
     );
 
-    let table_name = std::env::var("TABLE_NAME")
-        .unwrap_or_else(|_| "MainTable".to_string());
-    
+    let table_name = std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string());
+
     let handler = CommandHandler::new(table_name);
 
     match handler.handle_request(request).await {
@@ -45,15 +44,18 @@ async fn function_handler(
                 request_id = %context.request_id,
                 "Failed to process command"
             );
-            
+
             let error_response = ApiGatewayProxyResponse {
                 status_code: 500,
                 headers: Default::default(),
                 multi_value_headers: Default::default(),
-                body: Some(aws_lambda_events::encodings::Body::Text(serde_json::json!({
-                    "error": "Internal server error",
-                    "request_id": context.request_id
-                }).to_string())),
+                body: Some(aws_lambda_events::encodings::Body::Text(
+                    serde_json::json!({
+                        "error": "Internal server error",
+                        "request_id": context.request_id
+                    })
+                    .to_string(),
+                )),
                 is_base64_encoded: false,
             };
             Ok(error_response)
@@ -69,10 +71,10 @@ async fn main() -> Result<(), Error> {
     })?;
 
     info!("Todo Command Handler starting...");
-    
+
     let result = run(service_fn(function_handler)).await;
-    
+
     shutdown_telemetry();
-    
+
     result
 }

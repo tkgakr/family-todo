@@ -4,15 +4,15 @@ use chrono::Utc;
 use shared::{
     domain::{
         aggregates::Todo,
-        events::TodoEvent,
-        identifiers::{TodoId, UserId, FamilyId, EventId},
         error::DomainError,
+        events::TodoEvent,
+        identifiers::{EventId, FamilyId, TodoId, UserId},
     },
     infra::EventStore,
 };
-use tracing::{info, error, instrument};
+use tracing::{error, info, instrument};
 
-use crate::commands::{CreateTodoCommand, UpdateTodoCommand, DeleteTodoCommand};
+use crate::commands::{CreateTodoCommand, DeleteTodoCommand, UpdateTodoCommand};
 use crate::responses::ApiResponse;
 
 pub struct CommandHandler {
@@ -44,9 +44,12 @@ impl CommandHandler {
         ApiResponse::no_content()
     }
 
-    async fn handle_post(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
+    async fn handle_post(
+        &self,
+        request: ApiGatewayProxyRequest,
+    ) -> Result<ApiGatewayProxyResponse> {
         let path = request.path.as_deref().unwrap_or("");
-        
+
         if path == "/todos" {
             self.create_todo(request).await
         } else if let Some(todo_id) = self.extract_todo_id_from_complete_path(path) {
@@ -57,15 +60,20 @@ impl CommandHandler {
     }
 
     async fn handle_put(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
-        if let Some(todo_id) = self.extract_todo_id_from_path(request.path.as_deref().unwrap_or("")) {
+        if let Some(todo_id) = self.extract_todo_id_from_path(request.path.as_deref().unwrap_or(""))
+        {
             self.update_todo(todo_id, request).await
         } else {
             Ok(ApiResponse::not_found("Todo not found"))
         }
     }
 
-    async fn handle_delete(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
-        if let Some(todo_id) = self.extract_todo_id_from_path(request.path.as_deref().unwrap_or("")) {
+    async fn handle_delete(
+        &self,
+        request: ApiGatewayProxyRequest,
+    ) -> Result<ApiGatewayProxyResponse> {
+        if let Some(todo_id) = self.extract_todo_id_from_path(request.path.as_deref().unwrap_or(""))
+        {
             self.delete_todo(todo_id, request).await
         } else {
             Ok(ApiResponse::not_found("Todo not found"))
@@ -73,7 +81,10 @@ impl CommandHandler {
     }
 
     #[instrument(skip(self, request))]
-    async fn create_todo(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
+    async fn create_todo(
+        &self,
+        request: ApiGatewayProxyRequest,
+    ) -> Result<ApiGatewayProxyResponse> {
         let body = match request.body.as_ref() {
             Some(body) => body,
             None => return Ok(ApiResponse::bad_request("Request body is required")),
@@ -97,13 +108,20 @@ impl CommandHandler {
             event_id,
             todo_id: todo_id.clone(),
             title: command.title.trim().to_string(),
-            description: command.description.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()),
+            description: command
+                .description
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty()),
             tags: command.tags.unwrap_or_default(),
             created_by: user_id,
             timestamp: Utc::now(),
         };
 
-        match self.event_store.append_event(&family_id, event.clone()).await {
+        match self
+            .event_store
+            .append_event(&family_id, event.clone())
+            .await
+        {
             Ok(_) => {
                 info!(
                     todo_id = todo_id.as_str(),
@@ -159,7 +177,11 @@ impl CommandHandler {
             timestamp: Utc::now(),
         };
 
-        match self.event_store.append_event(&family_id, event.clone()).await {
+        match self
+            .event_store
+            .append_event(&family_id, event.clone())
+            .await
+        {
             Ok(_) => {
                 info!(
                     todo_id = todo_id.as_str(),
@@ -167,9 +189,15 @@ impl CommandHandler {
                     "Todo update event saved successfully"
                 );
 
-                match self.event_store.rebuild_with_snapshot(&family_id, &todo_id).await {
+                match self
+                    .event_store
+                    .rebuild_with_snapshot(&family_id, &todo_id)
+                    .await
+                {
                     Ok(todo) => Ok(ApiResponse::ok(todo)),
-                    Err(DomainError::TodoNotFound(_)) => Ok(ApiResponse::not_found("Todo not found")),
+                    Err(DomainError::TodoNotFound(_)) => {
+                        Ok(ApiResponse::not_found("Todo not found"))
+                    }
                     Err(e) => {
                         error!(error = %e, "Failed to rebuild todo from events");
                         Ok(ApiResponse::internal_server_error("Failed to update todo"))
@@ -200,7 +228,11 @@ impl CommandHandler {
             timestamp: Utc::now(),
         };
 
-        match self.event_store.append_event(&family_id, event.clone()).await {
+        match self
+            .event_store
+            .append_event(&family_id, event.clone())
+            .await
+        {
             Ok(_) => {
                 info!(
                     todo_id = todo_id.as_str(),
@@ -208,18 +240,28 @@ impl CommandHandler {
                     "Todo completion event saved successfully"
                 );
 
-                match self.event_store.rebuild_with_snapshot(&family_id, &todo_id).await {
+                match self
+                    .event_store
+                    .rebuild_with_snapshot(&family_id, &todo_id)
+                    .await
+                {
                     Ok(todo) => Ok(ApiResponse::ok(todo)),
-                    Err(DomainError::TodoNotFound(_)) => Ok(ApiResponse::not_found("Todo not found")),
+                    Err(DomainError::TodoNotFound(_)) => {
+                        Ok(ApiResponse::not_found("Todo not found"))
+                    }
                     Err(e) => {
                         error!(error = %e, "Failed to rebuild todo from events");
-                        Ok(ApiResponse::internal_server_error("Failed to complete todo"))
+                        Ok(ApiResponse::internal_server_error(
+                            "Failed to complete todo",
+                        ))
                     }
                 }
             }
             Err(e) => {
                 error!(error = %e, "Failed to save todo completion event");
-                Ok(ApiResponse::internal_server_error("Failed to complete todo"))
+                Ok(ApiResponse::internal_server_error(
+                    "Failed to complete todo",
+                ))
             }
         }
     }
@@ -234,7 +276,8 @@ impl CommandHandler {
         let user_id = self.extract_user_id(&request)?;
         let event_id = EventId::new();
 
-        let reason = request.body
+        let reason = request
+            .body
             .as_ref()
             .and_then(|body| serde_json::from_str::<DeleteTodoCommand>(body).ok())
             .and_then(|cmd| cmd.reason);
@@ -247,7 +290,11 @@ impl CommandHandler {
             timestamp: Utc::now(),
         };
 
-        match self.event_store.append_event(&family_id, event.clone()).await {
+        match self
+            .event_store
+            .append_event(&family_id, event.clone())
+            .await
+        {
             Ok(_) => {
                 info!(
                     todo_id = todo_id.as_str(),
@@ -293,7 +340,9 @@ impl CommandHandler {
     }
 
     fn extract_user_id(&self, request: &ApiGatewayProxyRequest) -> Result<UserId> {
-        let user_id_str = request.headers.get("x-user-id")
+        let user_id_str = request
+            .headers
+            .get("x-user-id")
             .ok_or_else(|| anyhow::anyhow!("User ID is required"))?;
 
         UserId::from_string(user_id_str.to_str().unwrap_or("").to_string())

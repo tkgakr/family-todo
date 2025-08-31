@@ -1,9 +1,9 @@
-pub mod error;
-pub mod identifiers;
-pub mod events;
 pub mod aggregates;
+pub mod error;
+pub mod events;
+pub mod identifiers;
 
-pub use error::*;
-pub use identifiers::*;
-pub use events::*;
 pub use aggregates::*;
+pub use error::*;
+pub use events::*;
+pub use identifiers::*;

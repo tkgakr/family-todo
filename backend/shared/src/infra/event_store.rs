@@ -3,9 +3,9 @@ use tracing::{error, info};
 
 use crate::domain::{
     aggregates::{Todo, TodoSnapshot},
+    error::DomainResult,
     events::TodoEvent,
     identifiers::{FamilyId, TodoId},
-    error::DomainResult,
 };
 use crate::infra::DynamoDbRepository;
 
@@ -23,11 +23,7 @@ impl EventStore {
         }
     }
 
-    pub async fn append_event(
-        &self,
-        family_id: &FamilyId,
-        event: TodoEvent,
-    ) -> Result<()> {
+    pub async fn append_event(&self, family_id: &FamilyId, event: TodoEvent) -> Result<()> {
         self.repository.save_event(family_id, &event).await
     }
 
@@ -37,8 +33,11 @@ impl EventStore {
         todo_id: &TodoId,
         last_event_id: &str,
     ) -> Result<Vec<TodoEvent>> {
-        let all_events = self.repository.get_events_for_todo(family_id, todo_id).await?;
-        
+        let all_events = self
+            .repository
+            .get_events_for_todo(family_id, todo_id)
+            .await?;
+
         let mut found_last = false;
         let mut events_after = Vec::new();
 
@@ -58,7 +57,9 @@ impl EventStore {
         family_id: &FamilyId,
         todo_id: &TodoId,
     ) -> Result<Vec<TodoEvent>> {
-        self.repository.get_events_for_todo(family_id, todo_id).await
+        self.repository
+            .get_events_for_todo(family_id, todo_id)
+            .await
     }
 
     pub async fn rebuild_with_snapshot(
@@ -66,14 +67,19 @@ impl EventStore {
         family_id: &FamilyId,
         todo_id: &TodoId,
     ) -> DomainResult<Todo> {
-        let snapshot = self.repository.get_latest_snapshot(family_id, todo_id).await
+        let snapshot = self
+            .repository
+            .get_latest_snapshot(family_id, todo_id)
+            .await
             .map_err(|e| crate::domain::error::DomainError::ValidationError(e.to_string()))?;
-        
+
         let events = if let Some(ref snap) = snapshot {
-            self.get_events_after(family_id, todo_id, &snap.last_event_id).await
+            self.get_events_after(family_id, todo_id, &snap.last_event_id)
+                .await
                 .map_err(|e| crate::domain::error::DomainError::ValidationError(e.to_string()))?
         } else {
-            self.get_all_events(family_id, todo_id).await
+            self.get_all_events(family_id, todo_id)
+                .await
                 .map_err(|e| crate::domain::error::DomainError::ValidationError(e.to_string()))?
         };
 
@@ -87,10 +93,15 @@ impl EventStore {
         if event_count >= SNAPSHOT_EVENT_THRESHOLD {
             let family_id_clone = family_id.clone();
             let todo_id_clone = todo_id.clone();
-            
+
             tokio::spawn(async move {
-                let event_store = EventStore::new(std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string()));
-                if let Err(e) = event_store.create_snapshot_if_needed(&family_id_clone, &todo_id_clone, event_count, None).await {
+                let event_store = EventStore::new(
+                    std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string()),
+                );
+                if let Err(e) = event_store
+                    .create_snapshot_if_needed(&family_id_clone, &todo_id_clone, event_count, None)
+                    .await
+                {
                     error!(error = %e, "Failed to create snapshot");
                 }
             });
@@ -106,15 +117,16 @@ impl EventStore {
         event_count: usize,
         last_snapshot_date: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<()> {
-        let should_create_snapshot = event_count >= SNAPSHOT_EVENT_THRESHOLD ||
-            last_snapshot_date.is_none_or(|date| {
-                chrono::Utc::now().signed_duration_since(date).num_days() >= SNAPSHOT_AGE_THRESHOLD_DAYS
+        let should_create_snapshot = event_count >= SNAPSHOT_EVENT_THRESHOLD
+            || last_snapshot_date.is_none_or(|date| {
+                chrono::Utc::now().signed_duration_since(date).num_days()
+                    >= SNAPSHOT_AGE_THRESHOLD_DAYS
             });
 
         if should_create_snapshot {
             let snapshot = self.build_snapshot(family_id, todo_id).await?;
             self.repository.save_snapshot(family_id, &snapshot).await?;
-            
+
             info!(
                 todo_id = todo_id.as_str(),
                 family_id = family_id.as_str(),
@@ -125,13 +137,9 @@ impl EventStore {
         Ok(())
     }
 
-    async fn build_snapshot(
-        &self,
-        family_id: &FamilyId,
-        todo_id: &TodoId,
-    ) -> Result<TodoSnapshot> {
+    async fn build_snapshot(&self, family_id: &FamilyId, todo_id: &TodoId) -> Result<TodoSnapshot> {
         let events = self.get_all_events(family_id, todo_id).await?;
-        
+
         if events.is_empty() {
             return Err(anyhow::anyhow!("No events found for todo"));
         }
@@ -167,21 +175,22 @@ impl EventProcessor {
         }
     }
 
-    pub async fn process_event(
-        &self,
-        family_id: &FamilyId,
-        event: TodoEvent,
-    ) -> Result<()> {
+    pub async fn process_event(&self, family_id: &FamilyId, event: TodoEvent) -> Result<()> {
         let todo_id = event.todo_id().clone();
-        
-        let current_todo = self.repository.get_todo(family_id, &todo_id).await
+
+        let current_todo = self
+            .repository
+            .get_todo(family_id, &todo_id)
+            .await
             .unwrap_or_else(|_| Todo::default());
-        
+
         let mut updated_todo = current_todo.clone();
         updated_todo.apply(event);
-        
-        self.repository.save_todo_projection(family_id, &updated_todo).await?;
-        
+
+        self.repository
+            .save_todo_projection(family_id, &updated_todo)
+            .await?;
+
         info!(
             todo_id = todo_id.as_str(),
             family_id = family_id.as_str(),

@@ -1,19 +1,17 @@
-mod processor;
 mod error_handling;
+mod processor;
 
 use aws_lambda_events::event::dynamodb::Event as DynamoDbEvent;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use shared::{init_telemetry, shutdown_telemetry};
 use tracing::{error, info};
 
-use processor::StreamProcessor;
 use error_handling::BatchItemFailures;
+use processor::StreamProcessor;
 
-async fn function_handler(
-    event: LambdaEvent<DynamoDbEvent>,
-) -> Result<BatchItemFailures, Error> {
+async fn function_handler(event: LambdaEvent<DynamoDbEvent>) -> Result<BatchItemFailures, Error> {
     let (dynamodb_event, context) = event.into_parts();
-    
+
     let span = tracing::Span::current();
     span.record("request_id", &context.request_id);
     span.record("function_name", &context.env_config.function_name);
@@ -24,9 +22,8 @@ async fn function_handler(
         "Processing DynamoDB stream records"
     );
 
-    let table_name = std::env::var("TABLE_NAME")
-        .unwrap_or_else(|_| "MainTable".to_string());
-    
+    let table_name = std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string());
+
     let processor = StreamProcessor::new(table_name);
 
     match processor.process_records(dynamodb_event.records).await {
@@ -64,10 +61,10 @@ async fn main() -> Result<(), Error> {
     })?;
 
     info!("Todo Event Processor starting...");
-    
+
     let result = run(service_fn(function_handler)).await;
-    
+
     shutdown_telemetry();
-    
+
     result
 }

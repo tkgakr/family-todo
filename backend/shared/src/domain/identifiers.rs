@@ -1,7 +1,7 @@
+use crate::domain::error::{DomainError, DomainResult};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use ulid::Ulid;
-use crate::domain::error::{DomainError, DomainResult};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -13,8 +13,7 @@ impl TodoId {
     }
 
     pub fn from_string(s: String) -> DomainResult<Self> {
-        Ulid::from_string(&s)
-            .map_err(|_| DomainError::InvalidTodoId(s.clone()))?;
+        Ulid::from_string(&s).map_err(|_| DomainError::InvalidTodoId(s.clone()))?;
         Ok(Self(s))
     }
 
@@ -27,7 +26,7 @@ impl TodoId {
             .ok()
             .map(|ulid| ulid.timestamp_ms())
     }
-    
+
     pub fn created_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
         self.timestamp_ms()
             .and_then(|ms| chrono::DateTime::from_timestamp_millis(ms as i64))
@@ -57,7 +56,9 @@ impl UserId {
 
     pub fn from_string(s: String) -> DomainResult<Self> {
         if s.is_empty() {
-            return Err(DomainError::InvalidUserId("User ID cannot be empty".to_string()));
+            return Err(DomainError::InvalidUserId(
+                "User ID cannot be empty".to_string(),
+            ));
         }
         Ok(Self(s))
     }
@@ -90,7 +91,9 @@ impl FamilyId {
 
     pub fn from_string(s: String) -> DomainResult<Self> {
         if s.is_empty() {
-            return Err(DomainError::InvalidUserId("Family ID cannot be empty".to_string()));
+            return Err(DomainError::InvalidUserId(
+                "Family ID cannot be empty".to_string(),
+            ));
         }
         Ok(Self(s))
     }
@@ -122,8 +125,7 @@ impl EventId {
     }
 
     pub fn from_string(s: String) -> DomainResult<Self> {
-        Ulid::from_string(&s)
-            .map_err(|_| DomainError::InvalidTodoId(s.clone()))?;
+        Ulid::from_string(&s).map_err(|_| DomainError::InvalidTodoId(s.clone()))?;
         Ok(Self(s))
     }
 

@@ -10,7 +10,9 @@ use shared::{
 };
 use tracing::{error, info, instrument};
 
-use crate::queries::{GetTodosQuery, TodoHistoryResponse, TodoListResponse, FamilyMembersResponse, FamilyMember};
+use crate::queries::{
+    FamilyMember, FamilyMembersResponse, GetTodosQuery, TodoHistoryResponse, TodoListResponse,
+};
 use crate::responses::ApiResponse;
 
 pub struct QueryHandler {
@@ -39,7 +41,7 @@ impl QueryHandler {
 
     async fn handle_get(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
         let path = request.path.as_deref().unwrap_or("");
-        
+
         if path == "/todos" {
             self.get_todos(request).await
         } else if let Some(todo_id) = self.extract_todo_id_from_path(path) {
@@ -61,10 +63,14 @@ impl QueryHandler {
         };
 
         let query = self.parse_todos_query(&request);
-        
+
         match query.status.as_ref().unwrap_or(&TodoStatus::Active) {
             TodoStatus::Active => {
-                match self.repository.get_active_todos(&family_id, query.limit.map(|l| l as i32)).await {
+                match self
+                    .repository
+                    .get_active_todos(&family_id, query.limit.map(|l| l as i32))
+                    .await
+                {
                     Ok(todos) => {
                         let response = TodoListResponse {
                             has_more: todos.len() == query.limit.unwrap_or(50) as usize,
@@ -157,28 +163,31 @@ impl QueryHandler {
             }
             Err(e) => {
                 error!(error = %e, "Failed to get todo history");
-                Ok(ApiResponse::internal_server_error("Failed to get todo history"))
+                Ok(ApiResponse::internal_server_error(
+                    "Failed to get todo history",
+                ))
             }
         }
     }
 
     #[instrument(skip(self, request))]
-    async fn get_family_members(&self, request: ApiGatewayProxyRequest) -> Result<ApiGatewayProxyResponse> {
+    async fn get_family_members(
+        &self,
+        request: ApiGatewayProxyRequest,
+    ) -> Result<ApiGatewayProxyResponse> {
         let _family_id = match self.extract_family_id(&request) {
             Ok(id) => id,
             Err(e) => return Ok(ApiResponse::bad_request(&e.to_string())),
         };
 
         // For now, return mock data since we haven't implemented family member management
-        let mock_members = vec![
-            FamilyMember {
-                user_id: "user1".to_string(),
-                display_name: "家族メンバー1".to_string(),
-                avatar_url: None,
-                role: "admin".to_string(),
-                joined_at: chrono::Utc::now(),
-            }
-        ];
+        let mock_members = vec![FamilyMember {
+            user_id: "user1".to_string(),
+            display_name: "家族メンバー1".to_string(),
+            avatar_url: None,
+            role: "admin".to_string(),
+            joined_at: chrono::Utc::now(),
+        }];
 
         let response = FamilyMembersResponse {
             total_count: mock_members.len() as u32,

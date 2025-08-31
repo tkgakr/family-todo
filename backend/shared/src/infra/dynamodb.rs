@@ -11,7 +11,7 @@ use tracing::{error, info};
 
 use crate::domain::{
     aggregates::{Todo, TodoSnapshot, TodoUpdates},
-    error::{UpdateError, DomainResult, DomainError},
+    error::{DomainError, DomainResult, UpdateError},
     events::TodoEvent,
     identifiers::{FamilyId, TodoId},
 };
@@ -37,11 +37,7 @@ impl DynamoDbRepository {
         }
     }
 
-    pub async fn save_event(
-        &self,
-        family_id: &FamilyId,
-        event: &TodoEvent,
-    ) -> Result<()> {
+    pub async fn save_event(&self, family_id: &FamilyId, event: &TodoEvent) -> Result<()> {
         let event_id = event.event_id().as_str();
         let pk = format!("FAMILY#{}", family_id.as_str());
         let sk = format!("EVENT#{event_id}");
@@ -56,8 +52,14 @@ impl DynamoDbRepository {
             .item("SK", AttributeValue::S(sk))
             .item("EntityType", AttributeValue::S("Event".to_string()))
             .item("Data", AttributeValue::S(event_json))
-            .item("CreatedAt", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
-            .item("TTL", AttributeValue::N((chrono::Utc::now().timestamp() + 86400 * 365).to_string()));
+            .item(
+                "CreatedAt",
+                AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+            )
+            .item(
+                "TTL",
+                AttributeValue::N((chrono::Utc::now().timestamp() + 86400 * 365).to_string()),
+            );
 
         request.send().await?;
 
@@ -107,14 +109,10 @@ impl DynamoDbRepository {
         Ok(events)
     }
 
-    pub async fn save_todo_projection(
-        &self,
-        family_id: &FamilyId,
-        todo: &Todo,
-    ) -> Result<()> {
+    pub async fn save_todo_projection(&self, family_id: &FamilyId, todo: &Todo) -> Result<()> {
         let pk = format!("FAMILY#{}", family_id.as_str());
         let sk = format!("TODO#CURRENT#{}", todo.id.as_str());
-        
+
         let todo_json = serde_json::to_string(todo)?;
 
         let mut request = self
@@ -126,12 +124,15 @@ impl DynamoDbRepository {
             .item("EntityType", AttributeValue::S("Projection".to_string()))
             .item("Data", AttributeValue::S(todo_json))
             .item("Version", AttributeValue::N(todo.version.to_string()))
-            .item("UpdatedAt", AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+            .item(
+                "UpdatedAt",
+                AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+            );
 
         if todo.is_active() {
             let gsi1_pk = format!("FAMILY#{}#ACTIVE", family_id.as_str());
             let gsi1_sk = todo.id.as_str().to_string();
-            
+
             request = request
                 .item("GSI1PK", AttributeValue::S(gsi1_pk))
                 .item("GSI1SK", AttributeValue::S(gsi1_sk));
@@ -149,11 +150,7 @@ impl DynamoDbRepository {
         Ok(())
     }
 
-    pub async fn get_todo(
-        &self,
-        family_id: &FamilyId,
-        todo_id: &TodoId,
-    ) -> DomainResult<Todo> {
+    pub async fn get_todo(&self, family_id: &FamilyId, todo_id: &TodoId) -> DomainResult<Todo> {
         let pk = format!("FAMILY#{}", family_id.as_str());
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
@@ -227,7 +224,8 @@ impl DynamoDbRepository {
         let sk = format!("TODO#CURRENT#{}", todo.id.as_str());
 
         let update_expression = self.build_update_expression(&updates);
-        let expression_attribute_values = self.build_expression_attribute_values(&updates, todo.version);
+        let expression_attribute_values =
+            self.build_expression_attribute_values(&updates, todo.version);
 
         let result = self
             .client
@@ -254,7 +252,10 @@ impl DynamoDbRepository {
                 Err(UpdateError::NotFound)
             }
             Err(sdk_error) => {
-                if sdk_error.to_string().contains("ConditionalCheckFailedException") {
+                if sdk_error
+                    .to_string()
+                    .contains("ConditionalCheckFailedException")
+                {
                     Err(UpdateError::ConcurrentModification)
                 } else {
                     Err(UpdateError::DynamoDb(sdk_error.to_string()))
@@ -263,13 +264,13 @@ impl DynamoDbRepository {
         }
     }
 
-    pub async fn save_snapshot(
-        &self,
-        family_id: &FamilyId,
-        snapshot: &TodoSnapshot,
-    ) -> Result<()> {
+    pub async fn save_snapshot(&self, family_id: &FamilyId, snapshot: &TodoSnapshot) -> Result<()> {
         let pk = format!("FAMILY#{}", family_id.as_str());
-        let sk = format!("TODO#SNAPSHOT#{}#{}", snapshot.todo_id.as_str(), snapshot.last_event_id);
+        let sk = format!(
+            "TODO#SNAPSHOT#{}#{}",
+            snapshot.todo_id.as_str(),
+            snapshot.last_event_id
+        );
 
         let snapshot_json = serde_json::to_string(snapshot)?;
 
@@ -280,8 +281,14 @@ impl DynamoDbRepository {
             .item("SK", AttributeValue::S(sk))
             .item("EntityType", AttributeValue::S("Snapshot".to_string()))
             .item("Data", AttributeValue::S(snapshot_json))
-            .item("CreatedAt", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
-            .item("TTL", AttributeValue::N((chrono::Utc::now().timestamp() + 86400 * 30).to_string()))
+            .item(
+                "CreatedAt",
+                AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+            )
+            .item(
+                "TTL",
+                AttributeValue::N((chrono::Utc::now().timestamp() + 86400 * 30).to_string()),
+            )
             .send()
             .await?;
 
@@ -327,11 +334,11 @@ impl DynamoDbRepository {
         if updates.title.is_some() {
             set_clauses.push("Data.title = :title".to_string());
         }
-        
+
         if updates.description.is_some() {
             set_clauses.push("Data.description = :description".to_string());
         }
-        
+
         if updates.tags.is_some() {
             set_clauses.push("Data.tags = :tags".to_string());
         }
@@ -345,21 +352,31 @@ impl DynamoDbRepository {
         current_version: u64,
     ) -> HashMap<String, AttributeValue> {
         let mut values = HashMap::new();
-        
-        values.insert(":current_version".to_string(), AttributeValue::N(current_version.to_string()));
+
+        values.insert(
+            ":current_version".to_string(),
+            AttributeValue::N(current_version.to_string()),
+        );
         values.insert(":inc".to_string(), AttributeValue::N("1".to_string()));
-        values.insert(":updated_at".to_string(), AttributeValue::S(chrono::Utc::now().to_rfc3339()));
+        values.insert(
+            ":updated_at".to_string(),
+            AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+        );
 
         if let Some(ref title) = updates.title {
             values.insert(":title".to_string(), AttributeValue::S(title.clone()));
         }
 
         if let Some(ref description) = updates.description {
-            values.insert(":description".to_string(), AttributeValue::S(description.clone()));
+            values.insert(
+                ":description".to_string(),
+                AttributeValue::S(description.clone()),
+            );
         }
 
         if let Some(ref tags) = updates.tags {
-            let tag_list: Vec<AttributeValue> = tags.iter()
+            let tag_list: Vec<AttributeValue> = tags
+                .iter()
                 .map(|tag| AttributeValue::S(tag.clone()))
                 .collect();
             values.insert(":tags".to_string(), AttributeValue::L(tag_list));
