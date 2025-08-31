@@ -22,6 +22,9 @@ Globals:
         RUST_LOG: info
         DYNAMODB_TABLE: !Ref FamilyTodoTable
         ENVIRONMENT: !Ref Environment
+        COGNITO_USER_POOL_ID: !Ref FamilyTodoUserPool
+        COGNITO_CLIENT_ID: !Ref FamilyTodoUserPoolClient
+        COGNITO_IDENTITY_POOL_ID: !Ref FamilyTodoIdentityPool
     Tracing: Active
     Timeout: 30
     MemorySize: 256
@@ -69,7 +72,7 @@ Resources:
         - Key: Application
           Value: FamilyTodo
 
-  # Cognito User Pool
+  # Cognito User Pool with WebAuthn Support
   FamilyTodoUserPool:
     Type: AWS::Cognito::UserPool
     Properties:
@@ -85,7 +88,20 @@ Resources:
         - email
       AutoVerifiedAttributes:
         - email
-      MfaConfiguration: "OFF"
+      MfaConfiguration: "OPTIONAL"
+      MfaConfigurationStatus: "ENABLED"
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+        - SMS_MFA
+      # WebAuthn (Passkey) 設定
+      UserAttributeUpdateSettings:
+        AttributesRequireVerificationBeforeUpdate:
+          - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      # カスタム属性の定義
       Schema:
         - Name: email
           AttributeDataType: String
@@ -95,11 +111,27 @@ Resources:
           AttributeDataType: String
           Required: false
           Mutable: true
+        - Name: family_role
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: display_name
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+        - Name: invitation_token
+          AttributeDataType: String
+          Required: false
+          Mutable: true
+      # デバイス追跡設定（WebAuthn デバイス用）
+      DeviceConfiguration:
+        ChallengeRequiredOnNewDevice: true
+        DeviceOnlyRememberedOnUserPrompt: false
       UserPoolTags:
         Environment: !Ref Environment
         Application: FamilyTodo
 
-  # Cognito User Pool Client
+  # Cognito User Pool Client with WebAuthn Support
   FamilyTodoUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
@@ -109,19 +141,88 @@ Resources:
       ExplicitAuthFlows:
         - ALLOW_USER_SRP_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_CUSTOM_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
       SupportedIdentityProviders:
         - COGNITO
       CallbackURLs:
         - http://localhost:3000/callback
+        - !Sub "https://${Environment}.familytodo.app/callback"
       LogoutURLs:
         - http://localhost:3000/logout
+        - !Sub "https://${Environment}.familytodo.app/logout"
       AllowedOAuthFlows:
         - code
+        - implicit
       AllowedOAuthScopes:
         - email
         - openid
         - profile
+        - aws.cognito.signin.user.admin
       AllowedOAuthFlowsUserPoolClient: true
+      # WebAuthn 設定
+      PreventUserExistenceErrors: ENABLED
+      EnableTokenRevocation: true
+      # セッション設定
+      AccessTokenValidity: 60 # 1時間
+      IdTokenValidity: 60 # 1時間
+      RefreshTokenValidity: 43200 # 30日
+      TokenValidityUnits:
+        AccessToken: minutes
+        IdToken: minutes
+        RefreshToken: minutes
+
+  # Cognito Identity Pool for AWS SDK Access
+  FamilyTodoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      IdentityPoolName: !Sub "family_todo_identity_pool_${Environment}"
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref FamilyTodoUserPoolClient
+          ProviderName: !GetAtt FamilyTodoUserPool.ProviderName
+
+  # IAM Role for Authenticated Users
+  CognitoAuthenticatedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "family-todo-authenticated-role-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref FamilyTodoIdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: CognitoAuthenticatedPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-sync:*
+                  - cognito-identity:*
+                Resource: "*"
+
+  # Identity Pool Role Attachment
+  IdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId: !Ref FamilyTodoIdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthenticatedRole.Arn
+
+  # SES Configuration for Invitation Emails
+  FamilyTodoSESConfigurationSet:
+    Type: AWS::SES::ConfigurationSet
+    Properties:
+      Name: !Sub "family-todo-ses-config-${Environment}"
 
   # API Gateway
   FamilyTodoApi:
@@ -249,6 +350,53 @@ Resources:
                 - xray:PutTelemetryRecords
               Resource: "*"
 
+  # Family Invitation Handler Lambda Function
+  FamilyInvitationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "family-todo-invitation-handler-${Environment}"
+      CodeUri: target/lambda/family-invitation/
+      Handler: bootstrap
+      Environment:
+        Variables:
+          SES_CONFIGURATION_SET: !Ref FamilyTodoSESConfigurationSet
+          COGNITO_USER_POOL_ID: !Ref FamilyTodoUserPool
+          COGNITO_CLIENT_ID: !Ref FamilyTodoUserPoolClient
+          FRONTEND_URL: !Sub "https://${Environment}.familytodo.app"
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref FamilyTodoApi
+            Path: /family/{proxy+}
+            Method: ANY
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FamilyTodoTable
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminSetUserPassword
+                - cognito-idp:AdminAddUserToGroup
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminUpdateUserAttributes
+                - cognito-idp:CreateGroup
+                - cognito-idp:GetGroup
+                - cognito-idp:ListUsersInGroup
+              Resource: !GetAtt FamilyTodoUserPool.Arn
+            - Effect: Allow
+              Action:
+                - xray:PutTraceSegments
+                - xray:PutTelemetryRecords
+              Resource: "*"
+
   # Dead Letter Queue for Event Processor
   EventProcessorDLQ:
     Type: AWS::SQS::Queue
@@ -284,6 +432,12 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/family-todo-snapshot-manager-${Environment}"
+      RetentionInDays: 14
+
+  FamilyInvitationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/family-todo-invitation-handler-${Environment}"
       RetentionInDays: 14
 
   # CloudWatch Alarms for Monitoring
@@ -467,6 +621,18 @@ Outputs:
     Value: !Ref FamilyTodoUserPoolClient
     Export:
       Name: !Sub "${AWS::StackName}-UserPoolClientId"
+
+  IdentityPoolId:
+    Description: Cognito Identity Pool ID
+    Value: !Ref FamilyTodoIdentityPool
+    Export:
+      Name: !Sub "${AWS::StackName}-IdentityPoolId"
+
+  SESConfigurationSet:
+    Description: SES Configuration Set Name
+    Value: !Ref FamilyTodoSESConfigurationSet
+    Export:
+      Name: !Sub "${AWS::StackName}-SESConfigurationSet"
 
   DynamoDBTableName:
     Description: DynamoDB Table Name

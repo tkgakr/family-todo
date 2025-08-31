@@ -32,6 +32,8 @@ install-deps: ## Install all dependencies
 
 lambda-build: ## Build Lambda functions
 	cargo lambda build --release --output-format zip
+	mkdir -p target/lambda/family-invitation
+	cp target/lambda/family-invitation/bootstrap target/lambda/family-invitation/
 
 sam-local: ## Start SAM local API
 	sam local start-api --port 8080 --env-vars local-env.json

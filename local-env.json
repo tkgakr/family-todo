@@ -22,5 +22,16 @@
     "ENVIRONMENT": "local",
     "DYNAMODB_TABLE": "family-todo-local",
     "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000"
+  },
+  "FamilyInvitationFunction": {
+    "RUST_LOG": "debug",
+    "ENVIRONMENT": "local",
+    "DYNAMODB_TABLE": "family-todo-local",
+    "DYNAMODB_ENDPOINT": "http://dynamodb-local:8000",
+    "COGNITO_USER_POOL_ID": "local-user-pool",
+    "COGNITO_CLIENT_ID": "local-client-id",
+    "COGNITO_IDENTITY_POOL_ID": "local-identity-pool",
+    "SES_CONFIGURATION_SET": "local-ses-config",
+    "FRONTEND_URL": "http://localhost:3000"
   }
 }

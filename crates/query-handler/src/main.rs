@@ -208,6 +208,7 @@ fn extract_user_claims(request: &ApiGatewayProxyRequest) -> Result<Claims> {
         family_id,
         exp,
         iat,
+        custom: std::collections::HashMap::new(),
     })
 }
 

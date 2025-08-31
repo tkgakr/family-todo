@@ -82,7 +82,7 @@
 
 - [ ] 5. 認証・認可システムの実装
 
-  - [ ] 5.1 Cognito ユーザープールと Passkey 認証を設定
+  - [x] 5.1 Cognito ユーザープールと Passkey 認証を設定
 
     - Cognito ユーザープールとアプリクライアントを作成する
     - WebAuthn（Passkey）認証の設定を行う

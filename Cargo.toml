@@ -7,7 +7,8 @@ members = [
     "crates/query-handler",
     "crates/event-processor",
     "crates/snapshot-manager",
-    "crates/shared"
+    "crates/shared",
+    "crates/family-invitation"
 ]
 
 [workspace.dependencies]
