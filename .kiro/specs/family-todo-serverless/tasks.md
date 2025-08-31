@@ -67,7 +67,7 @@
     - ToDo 履歴取得機能を実装する
     - _要件: 1.1, 2.1_
 
-  - [ ] 4.3 EventProcessor Lambda 関数を実装
+  - [x] 4.3 EventProcessor Lambda 関数を実装
 
     - DynamoDB Streams イベントの処理を実装する
     - イベントからプロジェクションの更新を実装する
