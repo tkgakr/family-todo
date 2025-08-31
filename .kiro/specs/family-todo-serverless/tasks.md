@@ -16,7 +16,7 @@
     - TodoId のユニットテストを作成する
     - _要件: 1.1, 2.2_
 
-  - [ ] 2.2 TodoEvent 列挙型とイベントスキーマを実装
+  - [x] 2.2 TodoEvent 列挙型とイベントスキーマを実装
 
     - TodoCreatedV2、TodoUpdatedV1、TodoCompletedV1、TodoDeletedV1 イベントを定義する
     - Serde を使用した JSON シリアライゼーション/デシリアライゼーションを実装する

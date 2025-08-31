@@ -10,6 +10,18 @@ pub enum DomainError {
 
     #[error("Invalid event data: {0}")]
     InvalidEvent(String),
+
+    #[error("Invalid event version: {0}")]
+    InvalidEventVersion(String),
+
+    #[error("Event serialization error: {0}")]
+    EventSerialization(String),
+
+    #[error("Event deserialization error: {0}")]
+    EventDeserialization(String),
+
+    #[error("Unknown event type: {0}")]
+    UnknownEventType(String),
 }
 
 #[derive(Debug, Error)]
