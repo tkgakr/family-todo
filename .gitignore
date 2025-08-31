@@ -1,0 +1,40 @@
+# macOS
+.DS_Store
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Rust / Cargo
+**/target/
+**/*.rs.bk
+
+# Logs
+*.log
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# AWS SAM/CDK/Terraform
+.aws-sam/
+cdk.out/
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+
+# Node/Frontend (future)
+node_modules/
+dist/
+build/
+.cache/
+
+# Coverage
+coverage/
+lcov.info
+
+# Misc
+tmp/

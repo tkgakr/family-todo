@@ -1,0 +1,11 @@
+# 家族向け ToDo アプリの Rust ワークスペース
+# 目的: ドメイン層/アプリ層/インフラ層を段階的に追加していく
+
+[workspace]
+members = [
+    "todo-domain",
+    "todo-api",
+]
+
+# 依存解決の安定化
+resolver = "2"
