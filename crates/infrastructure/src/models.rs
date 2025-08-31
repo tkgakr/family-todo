@@ -1,6 +1,6 @@
 use aws_sdk_dynamodb::types::AttributeValue;
 use chrono::{DateTime, Utc};
-use domain::{TodoEvent, TodoId, Todo};
+use domain::{Todo, TodoEvent, TodoId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -39,8 +39,8 @@ impl From<&str> for EntityType {
 /// DynamoDB Single Table Design のキー構造
 #[derive(Debug, Clone)]
 pub struct DynamoDbKeys {
-    pub pk: String,      // パーティションキー
-    pub sk: String,      // ソートキー
+    pub pk: String,              // パーティションキー
+    pub sk: String,              // ソートキー
     pub gsi1_pk: Option<String>, // GSI1 パーティションキー
     pub gsi1_sk: Option<String>, // GSI1 ソートキー
 }
@@ -142,77 +142,93 @@ impl DynamoDbItem {
 
         map.insert("PK".to_string(), AttributeValue::S(self.pk.clone()));
         map.insert("SK".to_string(), AttributeValue::S(self.sk.clone()));
-        map.insert("EntityType".to_string(), AttributeValue::S(self.entity_type.as_str().to_string()));
-        
+        map.insert(
+            "EntityType".to_string(),
+            AttributeValue::S(self.entity_type.as_str().to_string()),
+        );
+
         if let Some(gsi1_pk) = &self.gsi1_pk {
             map.insert("GSI1PK".to_string(), AttributeValue::S(gsi1_pk.clone()));
         }
-        
+
         if let Some(gsi1_sk) = &self.gsi1_sk {
             map.insert("GSI1SK".to_string(), AttributeValue::S(gsi1_sk.clone()));
         }
 
         map.insert("Data".to_string(), AttributeValue::S(self.data.to_string()));
-        map.insert("Version".to_string(), AttributeValue::N(self.version.to_string()));
-        
+        map.insert(
+            "Version".to_string(),
+            AttributeValue::N(self.version.to_string()),
+        );
+
         if let Some(ttl) = self.ttl {
             map.insert("TTL".to_string(), AttributeValue::N(ttl.to_string()));
         }
 
-        map.insert("CreatedAt".to_string(), AttributeValue::S(self.created_at.to_rfc3339()));
-        map.insert("UpdatedAt".to_string(), AttributeValue::S(self.updated_at.to_rfc3339()));
+        map.insert(
+            "CreatedAt".to_string(),
+            AttributeValue::S(self.created_at.to_rfc3339()),
+        );
+        map.insert(
+            "UpdatedAt".to_string(),
+            AttributeValue::S(self.updated_at.to_rfc3339()),
+        );
 
         map
     }
 
     /// DynamoDB AttributeValue マップから復元
     pub fn from_attribute_map(map: &HashMap<String, AttributeValue>) -> Result<Self, String> {
-        let pk = map.get("PK")
+        let pk = map
+            .get("PK")
             .and_then(|v| v.as_s().ok())
             .ok_or("Missing PK")?
             .clone();
 
-        let sk = map.get("SK")
+        let sk = map
+            .get("SK")
             .and_then(|v| v.as_s().ok())
             .ok_or("Missing SK")?
             .clone();
 
-        let entity_type = map.get("EntityType")
+        let entity_type = map
+            .get("EntityType")
             .and_then(|v| v.as_s().ok())
             .map(|s| EntityType::from(s.as_str()))
             .ok_or("Missing EntityType")?;
 
-        let gsi1_pk = map.get("GSI1PK")
-            .and_then(|v| v.as_s().ok())
-            .cloned();
+        let gsi1_pk = map.get("GSI1PK").and_then(|v| v.as_s().ok()).cloned();
 
-        let gsi1_sk = map.get("GSI1SK")
-            .and_then(|v| v.as_s().ok())
-            .cloned();
+        let gsi1_sk = map.get("GSI1SK").and_then(|v| v.as_s().ok()).cloned();
 
-        let data_str = map.get("Data")
+        let data_str = map
+            .get("Data")
             .and_then(|v| v.as_s().ok())
             .ok_or("Missing Data")?;
 
         let data: serde_json::Value = serde_json::from_str(data_str)
             .map_err(|e| format!("Failed to parse Data JSON: {}", e))?;
 
-        let version = map.get("Version")
+        let version = map
+            .get("Version")
             .and_then(|v| v.as_n().ok())
             .and_then(|s| s.parse::<u64>().ok())
             .ok_or("Missing or invalid Version")?;
 
-        let ttl = map.get("TTL")
+        let ttl = map
+            .get("TTL")
             .and_then(|v| v.as_n().ok())
             .and_then(|s| s.parse::<i64>().ok());
 
-        let created_at = map.get("CreatedAt")
+        let created_at = map
+            .get("CreatedAt")
             .and_then(|v| v.as_s().ok())
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&Utc))
             .ok_or("Missing or invalid CreatedAt")?;
 
-        let updated_at = map.get("UpdatedAt")
+        let updated_at = map
+            .get("UpdatedAt")
             .and_then(|v| v.as_s().ok())
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&Utc))
@@ -254,7 +270,7 @@ impl EventItem {
     pub fn to_dynamodb_item(&self) -> Result<DynamoDbItem, String> {
         let event_ulid = self.event.event_id();
         let keys = DynamoDbKeys::for_event(&self.family_id, event_ulid);
-        
+
         let data = serde_json::to_value(&self.event)
             .map_err(|e| format!("Failed to serialize event: {}", e))?;
 
@@ -277,7 +293,9 @@ impl EventItem {
             .map_err(|e| format!("Failed to deserialize event: {}", e))?;
 
         // PKからfamily_idを抽出
-        let family_id = item.pk.strip_prefix("FAMILY#")
+        let family_id = item
+            .pk
+            .strip_prefix("FAMILY#")
             .ok_or("Invalid PK format for Event")?
             .to_string();
 
@@ -314,7 +332,7 @@ impl ProjectionItem {
         } else {
             DynamoDbKeys::for_todo_projection(&self.family_id, &self.todo.id)
         };
-        
+
         let data = serde_json::to_value(&self.todo)
             .map_err(|e| format!("Failed to serialize todo: {}", e))?;
 
@@ -337,7 +355,9 @@ impl ProjectionItem {
             .map_err(|e| format!("Failed to deserialize todo: {}", e))?;
 
         // PKからfamily_idを抽出
-        let family_id = item.pk.strip_prefix("FAMILY#")
+        let family_id = item
+            .pk
+            .strip_prefix("FAMILY#")
             .ok_or("Invalid PK format for Projection")?
             .to_string();
 
@@ -370,9 +390,7 @@ impl SnapshotItem {
         ttl_days: Option<u32>,
     ) -> Self {
         let snapshot_id = ulid::Ulid::new().to_string();
-        let ttl = ttl_days.map(|days| {
-            Utc::now().timestamp() + (days as i64 * 24 * 60 * 60)
-        });
+        let ttl = ttl_days.map(|days| Utc::now().timestamp() + (days as i64 * 24 * 60 * 60));
 
         Self {
             family_id,
@@ -386,7 +404,7 @@ impl SnapshotItem {
     /// DynamoDbItem に変換
     pub fn to_dynamodb_item(&self) -> Result<DynamoDbItem, String> {
         let keys = DynamoDbKeys::for_snapshot(&self.family_id, &self.todo_id, &self.snapshot_id);
-        
+
         let data = serde_json::to_value(&self.data)
             .map_err(|e| format!("Failed to serialize snapshot: {}", e))?;
 
@@ -409,7 +427,9 @@ impl SnapshotItem {
             .map_err(|e| format!("Failed to deserialize snapshot: {}", e))?;
 
         // PKからfamily_idを抽出
-        let family_id = item.pk.strip_prefix("FAMILY#")
+        let family_id = item
+            .pk
+            .strip_prefix("FAMILY#")
             .ok_or("Invalid PK format for Snapshot")?
             .to_string();
 

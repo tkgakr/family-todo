@@ -1,9 +1,9 @@
-use aws_sdk_dynamodb::Client;
 use aws_config::{BehaviorVersion, Region};
-use shared::Config;
+use aws_sdk_dynamodb::Client;
 use domain::errors::TodoError;
+use shared::Config;
 use std::sync::Arc;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// DynamoDB クライアントのラッパー
 /// コネクション管理、エラーハンドリング、設定管理を提供
@@ -18,8 +18,10 @@ impl DynamoDbClient {
     /// 新しい DynamoDB クライアントを作成
     /// AWS 設定を自動的に読み込み、適切なリージョンを設定
     pub async fn new(config: &Config) -> Result<Self, TodoError> {
-        info!("DynamoDB クライアントを初期化中... region: {}, table: {}", 
-              config.aws_region, config.dynamodb_table);
+        info!(
+            "DynamoDB クライアントを初期化中... region: {}, table: {}",
+            config.aws_region, config.dynamodb_table
+        );
 
         let mut aws_config_builder = aws_config::defaults(BehaviorVersion::latest())
             .region(Region::new(config.aws_region.clone()));
@@ -34,17 +36,23 @@ impl DynamoDbClient {
         let client = Client::new(&aws_config);
 
         // 接続テスト（テーブルの存在確認）
-        match client.describe_table()
+        match client
+            .describe_table()
             .table_name(&config.dynamodb_table)
             .send()
             .await
         {
             Ok(_) => {
-                info!("DynamoDB テーブル '{}' への接続を確認", config.dynamodb_table);
+                info!(
+                    "DynamoDB テーブル '{}' への接続を確認",
+                    config.dynamodb_table
+                );
             }
             Err(e) => {
-                warn!("DynamoDB テーブル '{}' への接続確認に失敗: {}", 
-                      config.dynamodb_table, e);
+                warn!(
+                    "DynamoDB テーブル '{}' への接続確認に失敗: {}",
+                    config.dynamodb_table, e
+                );
                 // 開発環境では警告のみ、本番環境ではエラーとして扱う可能性
                 if config.environment == "prod" {
                     return Err(TodoError::DynamoDb(format!("テーブル接続エラー: {}", e)));
@@ -63,14 +71,18 @@ impl DynamoDbClient {
     #[cfg(test)]
     pub async fn new_for_test(config: &Config) -> Result<Self, TodoError> {
         use aws_sdk_dynamodb::config::Builder;
-        
+
         let aws_config = Builder::new()
-            .endpoint_url(config.dynamodb_endpoint.as_ref()
-                .unwrap_or(&"http://localhost:8000".to_string()))
+            .endpoint_url(
+                config
+                    .dynamodb_endpoint
+                    .as_ref()
+                    .unwrap_or(&"http://localhost:8000".to_string()),
+            )
             .region(Region::new(config.aws_region.clone()))
             .behavior_version(BehaviorVersion::latest())
             .build();
-        
+
         let client = Client::from_conf(aws_config);
 
         Ok(Self {
@@ -98,7 +110,7 @@ impl DynamoDbClient {
     /// DynamoDB エラーを TodoError に変換（簡略版）
     pub fn convert_error(&self, error: impl std::fmt::Display) -> TodoError {
         let error_str = error.to_string();
-        
+
         if error_str.contains("ConditionalCheckFailedException") {
             TodoError::ConcurrentModification
         } else if error_str.contains("ResourceNotFoundException") {
@@ -118,10 +130,10 @@ impl DynamoDbClient {
     /// リトライ可能なエラーかどうかを判定（簡略版）
     pub fn is_retryable_error(&self, error: impl std::fmt::Display) -> bool {
         let error_str = error.to_string();
-        error_str.contains("ThrottlingException") || 
-        error_str.contains("ServiceUnavailableException") || 
-        error_str.contains("InternalServerError") ||
-        error_str.contains("TimeoutError")
+        error_str.contains("ThrottlingException")
+            || error_str.contains("ServiceUnavailableException")
+            || error_str.contains("InternalServerError")
+            || error_str.contains("TimeoutError")
     }
 }
 
@@ -136,9 +148,9 @@ impl DynamoDbConnectionPool {
     /// 新しいコネクションプールを作成
     pub async fn new(config: &Config) -> Result<Self, TodoError> {
         let client = DynamoDbClient::new(config).await?;
-        
+
         info!("DynamoDB コネクションプールを初期化完了");
-        
+
         Ok(Self { client })
     }
 
@@ -149,7 +161,9 @@ impl DynamoDbConnectionPool {
 
     /// ヘルスチェック - 接続状態を確認
     pub async fn health_check(&self) -> Result<(), TodoError> {
-        match self.client.client()
+        match self
+            .client
+            .client()
             .describe_table()
             .table_name(self.client.table_name())
             .send()
@@ -182,10 +196,10 @@ mod tests {
             retry_max_attempts: 2,
             retry_initial_delay_ms: 10,
         };
-        
+
         let client = DynamoDbClient::new_for_test(&config).await;
         assert!(client.is_ok());
-        
+
         let client = client.unwrap();
         assert_eq!(client.table_name(), "test-table");
         assert_eq!(client.region(), "ap-northeast-1");
@@ -201,12 +215,12 @@ mod tests {
             retry_max_attempts: 2,
             retry_initial_delay_ms: 10,
         };
-        
+
         // 実際のDynamoDB Localが動いていない場合はスキップ
         if let Ok(pool) = DynamoDbConnectionPool::new(&config).await {
             let client1 = pool.get_client();
             let client2 = pool.get_client();
-            
+
             // クライアントは異なるインスタンスだが、同じ設定を持つ
             assert_eq!(client1.table_name(), client2.table_name());
         }

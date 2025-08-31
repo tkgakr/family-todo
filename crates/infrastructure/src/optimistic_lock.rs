@@ -1,9 +1,12 @@
-use crate::{DynamoDbClient, ProjectionRepository, EventRepository, retry_dynamodb_operation, RetryConfig};
+use crate::{
+    retry_dynamodb_operation, DynamoDbClient, EventRepository, ProjectionRepository, RetryConfig,
+};
 use aws_sdk_dynamodb::types::AttributeValue;
-use domain::{TodoError, TodoEvent, TodoId, Todo};
-use tracing::{info, warn, debug};
+use domain::{Todo, TodoError, TodoEvent, TodoId};
+use tracing::{debug, info, warn};
 
 /// 楽観的ロック制御を提供するサービス
+#[derive(Clone)]
 pub struct OptimisticLockService {
     db: DynamoDbClient,
     event_repo: EventRepository,
@@ -14,12 +17,22 @@ impl OptimisticLockService {
     pub fn new(db: DynamoDbClient) -> Self {
         let event_repo = EventRepository::new(db.clone());
         let projection_repo = ProjectionRepository::new(db.clone());
-        
+
         Self {
             db,
             event_repo,
             projection_repo,
         }
+    }
+
+    /// EventRepositoryへの参照を取得
+    pub fn event_repo(&self) -> &EventRepository {
+        &self.event_repo
+    }
+
+    /// ProjectionRepositoryへの参照を取得
+    pub fn projection_repo(&self) -> &ProjectionRepository {
+        &self.projection_repo
     }
 
     /// 楽観的ロックを使用してToDoを更新
@@ -31,18 +44,24 @@ impl OptimisticLockService {
         expected_version: u64,
         event: TodoEvent,
     ) -> Result<Todo, TodoError> {
-        info!("楽観的ロック更新開始: family_id={}, todo_id={}, expected_version={}", 
-              family_id, todo_id, expected_version);
+        info!(
+            "楽観的ロック更新開始: family_id={}, todo_id={}, expected_version={}",
+            family_id, todo_id, expected_version
+        );
 
         // 現在のプロジェクションを取得してバージョンを確認
-        let current_todo = self.projection_repo
+        let current_todo = self
+            .projection_repo
             .get_projection(family_id, todo_id)
             .await?
             .ok_or_else(|| TodoError::NotFound(format!("ToDo not found: {}", todo_id)))?;
 
         // バージョンチェック
         if current_todo.version != expected_version {
-            warn!("バージョン競合検出: expected={}, actual={}", expected_version, current_todo.version);
+            warn!(
+                "バージョン競合検出: expected={}, actual={}",
+                expected_version, current_todo.version
+            );
             return Err(TodoError::ConcurrentModification);
         }
 
@@ -52,8 +71,10 @@ impl OptimisticLockService {
         // プロジェクションを更新
         let mut updated_todo = current_todo;
         updated_todo.apply(event)?;
-        
-        self.projection_repo.save_projection(family_id, updated_todo.clone()).await?;
+
+        self.projection_repo
+            .save_projection(family_id, updated_todo.clone())
+            .await?;
 
         debug!("楽観的ロック更新完了: new_version={}", updated_todo.version);
         Ok(updated_todo)
@@ -71,8 +92,10 @@ impl OptimisticLockService {
     where
         F: Fn(&Todo) -> Result<TodoEvent, TodoError>,
     {
-        info!("リトライ付き楽観的ロック更新開始: family_id={}, todo_id={}, max_retries={}", 
-              family_id, todo_id, max_retries);
+        info!(
+            "リトライ付き楽観的ロック更新開始: family_id={}, todo_id={}, max_retries={}",
+            family_id, todo_id, max_retries
+        );
 
         let retry_config = RetryConfig {
             max_attempts: max_retries,
@@ -84,7 +107,8 @@ impl OptimisticLockService {
         retry_dynamodb_operation(
             || async {
                 // 最新のプロジェクションを取得
-                let current_todo = self.projection_repo
+                let current_todo = self
+                    .projection_repo
                     .get_projection(family_id, todo_id)
                     .await?
                     .ok_or_else(|| TodoError::NotFound(format!("ToDo not found: {}", todo_id)))?;
@@ -93,10 +117,12 @@ impl OptimisticLockService {
                 let event = event_generator(&current_todo)?;
 
                 // 楽観的ロック更新を実行
-                self.update_todo_with_lock(family_id, todo_id, current_todo.version, event).await
+                self.update_todo_with_lock(family_id, todo_id, current_todo.version, event)
+                    .await
             },
             Some(&retry_config),
-        ).await
+        )
+        .await
     }
 
     /// 条件付きでプロジェクションを更新（DynamoDB条件式使用）
@@ -106,8 +132,10 @@ impl OptimisticLockService {
         todo: &Todo,
         expected_version: u64,
     ) -> Result<(), TodoError> {
-        info!("条件付きプロジェクション更新: family_id={}, todo_id={}, expected_version={}", 
-              family_id, todo.id, expected_version);
+        info!(
+            "条件付きプロジェクション更新: family_id={}, todo_id={}, expected_version={}",
+            family_id, todo.id, expected_version
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk = format!("TODO#CURRENT#{}", todo.id.as_str());
@@ -117,19 +145,31 @@ impl OptimisticLockService {
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .update_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
                     .key("SK", AttributeValue::S(sk.clone()))
-                    .update_expression("SET #data = :data, #version = :new_version, UpdatedAt = :updated_at")
+                    .update_expression(
+                        "SET #data = :data, #version = :new_version, UpdatedAt = :updated_at",
+                    )
                     .condition_expression("#version = :expected_version")
                     .expression_attribute_names("#data", "Data")
                     .expression_attribute_names("#version", "Version")
                     .expression_attribute_values(":data", AttributeValue::S(todo_json.clone()))
-                    .expression_attribute_values(":new_version", AttributeValue::N(todo.version.to_string()))
-                    .expression_attribute_values(":expected_version", AttributeValue::N(expected_version.to_string()))
-                    .expression_attribute_values(":updated_at", AttributeValue::S(chrono::Utc::now().to_rfc3339()))
+                    .expression_attribute_values(
+                        ":new_version",
+                        AttributeValue::N(todo.version.to_string()),
+                    )
+                    .expression_attribute_values(
+                        ":expected_version",
+                        AttributeValue::N(expected_version.to_string()),
+                    )
+                    .expression_attribute_values(
+                        ":updated_at",
+                        AttributeValue::S(chrono::Utc::now().to_rfc3339()),
+                    )
                     .send()
                     .await
                     .map_err(|e| self.db.convert_error(e))?;
@@ -138,7 +178,8 @@ impl OptimisticLockService {
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// バッチでの楽観的ロック更新
@@ -148,19 +189,20 @@ impl OptimisticLockService {
         family_id: &str,
         updates: Vec<(TodoId, u64, TodoEvent)>, // (todo_id, expected_version, event)
     ) -> Result<Vec<Todo>, TodoError> {
-        info!("バッチ楽観的ロック更新開始: family_id={}, count={}", family_id, updates.len());
+        info!(
+            "バッチ楽観的ロック更新開始: family_id={}, count={}",
+            family_id,
+            updates.len()
+        );
 
         let mut updated_todos = Vec::new();
 
         // トランザクション的な処理のため、すべての更新を順次実行
         for (todo_id, expected_version, event) in updates {
-            let updated_todo = self.update_todo_with_lock(
-                family_id,
-                &todo_id,
-                expected_version,
-                event,
-            ).await?;
-            
+            let updated_todo = self
+                .update_todo_with_lock(family_id, &todo_id, expected_version, event)
+                .await?;
+
             updated_todos.push(updated_todo);
         }
 
@@ -179,7 +221,9 @@ impl OptimisticLockService {
 
         retry_dynamodb_operation(
             || async {
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .get_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
@@ -190,7 +234,8 @@ impl OptimisticLockService {
                     .map_err(|e| self.db.convert_error(e))?;
 
                 if let Some(item) = response.item {
-                    let version = item.get("Version")
+                    let version = item
+                        .get("Version")
                         .and_then(|v| v.as_n().ok())
                         .and_then(|s| s.parse::<u64>().ok())
                         .ok_or_else(|| TodoError::Internal("バージョン取得エラー".to_string()))?;
@@ -201,7 +246,8 @@ impl OptimisticLockService {
                 }
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 楽観的ロックによるToDo削除
@@ -212,8 +258,10 @@ impl OptimisticLockService {
         expected_version: u64,
         delete_event: TodoEvent,
     ) -> Result<(), TodoError> {
-        info!("楽観的ロック削除開始: family_id={}, todo_id={}, expected_version={}", 
-              family_id, todo_id, expected_version);
+        info!(
+            "楽観的ロック削除開始: family_id={}, todo_id={}, expected_version={}",
+            family_id, todo_id, expected_version
+        );
 
         // 削除イベントを保存
         self.event_repo.save_event(family_id, delete_event).await?;
@@ -224,13 +272,17 @@ impl OptimisticLockService {
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .delete_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
                     .key("SK", AttributeValue::S(sk.clone()))
                     .condition_expression("Version = :expected_version")
-                    .expression_attribute_values(":expected_version", AttributeValue::N(expected_version.to_string()))
+                    .expression_attribute_values(
+                        ":expected_version",
+                        AttributeValue::N(expected_version.to_string()),
+                    )
                     .send()
                     .await
                     .map_err(|e| self.db.convert_error(e))?;
@@ -239,7 +291,8 @@ impl OptimisticLockService {
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 }
 
@@ -271,13 +324,12 @@ pub mod helpers {
         completed_by: String,
     ) -> Result<TodoEvent, TodoError> {
         if todo.completed {
-            return Err(TodoError::Validation("ToDoは既に完了しています".to_string()));
+            return Err(TodoError::Validation(
+                "ToDoは既に完了しています".to_string(),
+            ));
         }
 
-        Ok(TodoEvent::new_todo_completed(
-            todo.id.clone(),
-            completed_by,
-        ))
+        Ok(TodoEvent::new_todo_completed(todo.id.clone(), completed_by))
     }
 
     /// ToDo削除のイベント生成ヘルパー
@@ -287,7 +339,9 @@ pub mod helpers {
         reason: Option<String>,
     ) -> Result<TodoEvent, TodoError> {
         if todo.deleted {
-            return Err(TodoError::Validation("ToDoは既に削除されています".to_string()));
+            return Err(TodoError::Validation(
+                "ToDoは既に削除されています".to_string(),
+            ));
         }
 
         Ok(TodoEvent::new_todo_deleted(
@@ -301,10 +355,9 @@ pub mod helpers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shared::Config;
     use domain::{TodoEvent, TodoId};
+    use shared::Config;
     use std::sync::Arc;
-
 
     async fn setup_test_service() -> OptimisticLockService {
         let config = Config {
@@ -335,9 +388,14 @@ mod tests {
         );
 
         let initial_todo = Todo::from_created_event(&create_event).unwrap();
-        
+
         // 実際のDynamoDB Localが動いていない場合はスキップ
-        if service.projection_repo.save_projection(family_id, initial_todo.clone()).await.is_ok() {
+        if service
+            .projection_repo
+            .save_projection(family_id, initial_todo.clone())
+            .await
+            .is_ok()
+        {
             // 楽観的ロック更新
             let update_event = TodoEvent::new_todo_updated(
                 todo_id.clone(),
@@ -346,12 +404,9 @@ mod tests {
                 "user123".to_string(),
             );
 
-            let result = service.update_todo_with_lock(
-                family_id,
-                &todo_id,
-                initial_todo.version,
-                update_event,
-            ).await;
+            let result = service
+                .update_todo_with_lock(family_id, &todo_id, initial_todo.version, update_event)
+                .await;
 
             assert!(result.is_ok());
             let updated_todo = result.unwrap();
@@ -376,9 +431,14 @@ mod tests {
         );
 
         let initial_todo = Todo::from_created_event(&create_event).unwrap();
-        
+
         // 実際のDynamoDB Localが動いていない場合はスキップ
-        if service.projection_repo.save_projection(family_id, initial_todo.clone()).await.is_ok() {
+        if service
+            .projection_repo
+            .save_projection(family_id, initial_todo.clone())
+            .await
+            .is_ok()
+        {
             // 間違ったバージョンで更新を試行
             let update_event = TodoEvent::new_todo_updated(
                 todo_id.clone(),
@@ -387,15 +447,20 @@ mod tests {
                 "user123".to_string(),
             );
 
-            let result = service.update_todo_with_lock(
-                family_id,
-                &todo_id,
-                initial_todo.version + 1, // 間違ったバージョン
-                update_event,
-            ).await;
+            let result = service
+                .update_todo_with_lock(
+                    family_id,
+                    &todo_id,
+                    initial_todo.version + 1, // 間違ったバージョン
+                    update_event,
+                )
+                .await;
 
             assert!(result.is_err());
-            assert!(matches!(result.unwrap_err(), TodoError::ConcurrentModification));
+            assert!(matches!(
+                result.unwrap_err(),
+                TodoError::ConcurrentModification
+            ));
         }
     }
 
@@ -415,9 +480,14 @@ mod tests {
         );
 
         let initial_todo = Todo::from_created_event(&create_event).unwrap();
-        
+
         // 実際のDynamoDB Localが動いていない場合はスキップ
-        if service.projection_repo.save_projection(family_id, initial_todo.clone()).await.is_ok() {
+        if service
+            .projection_repo
+            .save_projection(family_id, initial_todo.clone())
+            .await
+            .is_ok()
+        {
             // 同時更新をシミュレート
             let service1 = service.clone();
             let service2 = service.clone();
@@ -425,25 +495,31 @@ mod tests {
             let todo_id2 = todo_id.clone();
 
             let handle1 = tokio::spawn(async move {
-                service1.update_todo_with_retry(
-                    family_id,
-                    &todo_id1,
-                    3,
-                    |todo| helpers::create_title_update_event(todo, "更新1".to_string(), "user1".to_string()),
-                ).await
+                service1
+                    .update_todo_with_retry(family_id, &todo_id1, 3, |todo| {
+                        helpers::create_title_update_event(
+                            todo,
+                            "更新1".to_string(),
+                            "user1".to_string(),
+                        )
+                    })
+                    .await
             });
 
             let handle2 = tokio::spawn(async move {
-                service2.update_todo_with_retry(
-                    family_id,
-                    &todo_id2,
-                    3,
-                    |todo| helpers::create_title_update_event(todo, "更新2".to_string(), "user2".to_string()),
-                ).await
+                service2
+                    .update_todo_with_retry(family_id, &todo_id2, 3, |todo| {
+                        helpers::create_title_update_event(
+                            todo,
+                            "更新2".to_string(),
+                            "user2".to_string(),
+                        )
+                    })
+                    .await
             });
 
             let (result1, result2) = tokio::join!(handle1, handle2);
-            
+
             // 少なくとも一つは成功するはず
             assert!(result1.is_ok() || result2.is_ok());
         }
@@ -470,11 +546,8 @@ mod tests {
         assert!(title_event.is_ok());
 
         // 空のタイトルでエラー
-        let invalid_title_event = helpers::create_title_update_event(
-            &todo,
-            "".to_string(),
-            "user456".to_string(),
-        );
+        let invalid_title_event =
+            helpers::create_title_update_event(&todo, "".to_string(), "user456".to_string());
         assert!(invalid_title_event.is_err());
 
         // 完了イベント生成

@@ -1,10 +1,13 @@
-use crate::{DynamoDbClient, EventItem, ProjectionItem, SnapshotItem, SnapshotData, retry_dynamodb_operation};
+use crate::{
+    retry_dynamodb_operation, DynamoDbClient, EventItem, ProjectionItem, SnapshotData, SnapshotItem,
+};
 use aws_sdk_dynamodb::types::AttributeValue;
-use domain::{TodoError, TodoEvent, TodoId, Todo};
-use tracing::{info, debug};
+use domain::{Todo, TodoError, TodoEvent, TodoId};
+use tracing::{debug, info};
 
 /// イベントストアリポジトリ
 /// イベントの保存・取得機能を提供
+#[derive(Clone)]
 pub struct EventRepository {
     db: DynamoDbClient,
 }
@@ -17,17 +20,23 @@ impl EventRepository {
     /// イベントを保存する
     /// 楽観的ロックを使用して同時実行制御を行う
     pub async fn save_event(&self, family_id: &str, event: TodoEvent) -> Result<(), TodoError> {
-        info!("イベントを保存中: family_id={}, event_id={}", family_id, event.event_id());
+        info!(
+            "イベントを保存中: family_id={}, event_id={}",
+            family_id,
+            event.event_id()
+        );
 
         let event_item = EventItem::new(family_id.to_string(), event, 1);
-        let dynamodb_item = event_item.to_dynamodb_item()
+        let dynamodb_item = event_item
+            .to_dynamodb_item()
             .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {}", e)))?;
 
         let attr_map = dynamodb_item.to_attribute_map();
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .put_item()
                     .table_name(self.db.table_name())
                     .set_item(Some(attr_map.clone()))
@@ -41,7 +50,8 @@ impl EventRepository {
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 特定のToDoに関連するすべてのイベントを取得
@@ -50,14 +60,19 @@ impl EventRepository {
         family_id: &str,
         todo_id: &TodoId,
     ) -> Result<Vec<TodoEvent>, TodoError> {
-        info!("イベント取得中: family_id={}, todo_id={}", family_id, todo_id);
+        info!(
+            "イベント取得中: family_id={}, todo_id={}",
+            family_id, todo_id
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk_prefix = format!("TODO#EVENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
             || async {
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .query()
                     .table_name(self.db.table_name())
                     .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
@@ -71,10 +86,14 @@ impl EventRepository {
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
+                            })?;
 
-                        let event_item = EventItem::from_dynamodb_item(&dynamodb_item)
-                            .map_err(|e| TodoError::Internal(format!("イベントアイテム変換エラー: {}", e)))?;
+                        let event_item =
+                            EventItem::from_dynamodb_item(&dynamodb_item).map_err(|e| {
+                                TodoError::Internal(format!("イベントアイテム変換エラー: {}", e))
+                            })?;
 
                         events.push(event_item.event);
                     }
@@ -87,7 +106,8 @@ impl EventRepository {
                 Ok(events)
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 家族のすべてのイベントを取得（時系列順）
@@ -98,12 +118,17 @@ impl EventRepository {
 
         retry_dynamodb_operation(
             || async {
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .query()
                     .table_name(self.db.table_name())
                     .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
                     .expression_attribute_values(":pk", AttributeValue::S(pk.clone()))
-                    .expression_attribute_values(":sk_prefix", AttributeValue::S("EVENT#".to_string()))
+                    .expression_attribute_values(
+                        ":sk_prefix",
+                        AttributeValue::S("EVENT#".to_string()),
+                    )
                     .send()
                     .await
                     .map_err(|e| self.db.convert_error(e))?;
@@ -112,10 +137,14 @@ impl EventRepository {
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
+                            })?;
 
-                        let event_item = EventItem::from_dynamodb_item(&dynamodb_item)
-                            .map_err(|e| TodoError::Internal(format!("イベントアイテム変換エラー: {}", e)))?;
+                        let event_item =
+                            EventItem::from_dynamodb_item(&dynamodb_item).map_err(|e| {
+                                TodoError::Internal(format!("イベントアイテム変換エラー: {}", e))
+                            })?;
 
                         events.push(event_item.event);
                     }
@@ -128,7 +157,8 @@ impl EventRepository {
                 Ok(events)
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 特定のイベントIDでイベントを取得
@@ -137,14 +167,19 @@ impl EventRepository {
         family_id: &str,
         event_id: &str,
     ) -> Result<Option<TodoEvent>, TodoError> {
-        info!("イベントID取得中: family_id={}, event_id={}", family_id, event_id);
+        info!(
+            "イベントID取得中: family_id={}, event_id={}",
+            family_id, event_id
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk = format!("EVENT#{}", event_id);
 
         retry_dynamodb_operation(
             || async {
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .get_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
@@ -157,8 +192,10 @@ impl EventRepository {
                     let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
                         .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
 
-                    let event_item = EventItem::from_dynamodb_item(&dynamodb_item)
-                        .map_err(|e| TodoError::Internal(format!("イベントアイテム変換エラー: {}", e)))?;
+                    let event_item =
+                        EventItem::from_dynamodb_item(&dynamodb_item).map_err(|e| {
+                            TodoError::Internal(format!("イベントアイテム変換エラー: {}", e))
+                        })?;
 
                     debug!("イベント取得完了: {}", event_id);
                     Ok(Some(event_item.event))
@@ -168,12 +205,14 @@ impl EventRepository {
                 }
             },
             None,
-        ).await
+        )
+        .await
     }
 }
 
 /// プロジェクションリポジトリ
 /// 現在のToDo状態の管理機能を提供
+#[derive(Clone)]
 pub struct ProjectionRepository {
     db: DynamoDbClient,
 }
@@ -185,17 +224,22 @@ impl ProjectionRepository {
 
     /// ToDoプロジェクションを保存または更新
     pub async fn save_projection(&self, family_id: &str, todo: Todo) -> Result<(), TodoError> {
-        info!("プロジェクション保存中: family_id={}, todo_id={}", family_id, todo.id);
+        info!(
+            "プロジェクション保存中: family_id={}, todo_id={}",
+            family_id, todo.id
+        );
 
         let projection_item = ProjectionItem::new(family_id.to_string(), todo);
-        let dynamodb_item = projection_item.to_dynamodb_item()
+        let dynamodb_item = projection_item
+            .to_dynamodb_item()
             .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {}", e)))?;
 
         let attr_map = dynamodb_item.to_attribute_map();
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .put_item()
                     .table_name(self.db.table_name())
                     .set_item(Some(attr_map.clone()))
@@ -207,7 +251,8 @@ impl ProjectionRepository {
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 特定のToDoプロジェクションを取得
@@ -216,14 +261,19 @@ impl ProjectionRepository {
         family_id: &str,
         todo_id: &TodoId,
     ) -> Result<Option<Todo>, TodoError> {
-        info!("プロジェクション取得中: family_id={}, todo_id={}", family_id, todo_id);
+        info!(
+            "プロジェクション取得中: family_id={}, todo_id={}",
+            family_id, todo_id
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
             || async {
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .get_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
@@ -237,7 +287,12 @@ impl ProjectionRepository {
                         .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
 
                     let projection_item = ProjectionItem::from_dynamodb_item(&dynamodb_item)
-                        .map_err(|e| TodoError::Internal(format!("プロジェクションアイテム変換エラー: {}", e)))?;
+                        .map_err(|e| {
+                            TodoError::Internal(format!(
+                                "プロジェクションアイテム変換エラー: {}",
+                                e
+                            ))
+                        })?;
 
                     debug!("プロジェクション取得完了: {}", todo_id);
                     Ok(Some(projection_item.todo))
@@ -247,7 +302,8 @@ impl ProjectionRepository {
                 }
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// アクティブなToDo一覧を取得
@@ -262,7 +318,9 @@ impl ProjectionRepository {
 
         retry_dynamodb_operation(
             || async {
-                let mut query = self.db.client()
+                let mut query = self
+                    .db
+                    .client()
                     .query()
                     .table_name(self.db.table_name())
                     .index_name("GSI1")
@@ -273,19 +331,23 @@ impl ProjectionRepository {
                     query = query.limit(limit);
                 }
 
-                let response = query
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))?;
+                let response = query.send().await.map_err(|e| self.db.convert_error(e))?;
 
                 let mut todos = Vec::new();
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
+                            })?;
 
                         let projection_item = ProjectionItem::from_dynamodb_item(&dynamodb_item)
-                            .map_err(|e| TodoError::Internal(format!("プロジェクションアイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!(
+                                    "プロジェクションアイテム変換エラー: {}",
+                                    e
+                                ))
+                            })?;
 
                         todos.push(projection_item.todo);
                     }
@@ -295,7 +357,8 @@ impl ProjectionRepository {
                 Ok(todos)
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 家族のすべてのToDo（アクティブ・非アクティブ含む）を取得
@@ -310,30 +373,39 @@ impl ProjectionRepository {
 
         retry_dynamodb_operation(
             || async {
-                let mut query = self.db.client()
+                let mut query = self
+                    .db
+                    .client()
                     .query()
                     .table_name(self.db.table_name())
                     .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
                     .expression_attribute_values(":pk", AttributeValue::S(pk.clone()))
-                    .expression_attribute_values(":sk_prefix", AttributeValue::S("TODO#CURRENT#".to_string()));
+                    .expression_attribute_values(
+                        ":sk_prefix",
+                        AttributeValue::S("TODO#CURRENT#".to_string()),
+                    );
 
                 if let Some(limit) = limit {
                     query = query.limit(limit);
                 }
 
-                let response = query
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))?;
+                let response = query.send().await.map_err(|e| self.db.convert_error(e))?;
 
                 let mut todos = Vec::new();
                 if let Some(items) = response.items {
                     for item in items {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(&item)
-                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!("アイテム変換エラー: {}", e))
+                            })?;
 
                         let projection_item = ProjectionItem::from_dynamodb_item(&dynamodb_item)
-                            .map_err(|e| TodoError::Internal(format!("プロジェクションアイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!(
+                                    "プロジェクションアイテム変換エラー: {}",
+                                    e
+                                ))
+                            })?;
 
                         todos.push(projection_item.todo);
                     }
@@ -343,19 +415,28 @@ impl ProjectionRepository {
                 Ok(todos)
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// プロジェクションを削除（物理削除）
-    pub async fn delete_projection(&self, family_id: &str, todo_id: &TodoId) -> Result<(), TodoError> {
-        info!("プロジェクション削除中: family_id={}, todo_id={}", family_id, todo_id);
+    pub async fn delete_projection(
+        &self,
+        family_id: &str,
+        todo_id: &TodoId,
+    ) -> Result<(), TodoError> {
+        info!(
+            "プロジェクション削除中: family_id={}, todo_id={}",
+            family_id, todo_id
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk = format!("TODO#CURRENT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .delete_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
@@ -368,12 +449,14 @@ impl ProjectionRepository {
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 }
 
 /// スナップショットリポジトリ
 /// スナップショット管理機能を提供
+#[derive(Clone)]
 pub struct SnapshotRepository {
     db: DynamoDbClient,
 }
@@ -391,7 +474,10 @@ impl SnapshotRepository {
         snapshot_data: SnapshotData,
         ttl_days: Option<u32>,
     ) -> Result<String, TodoError> {
-        info!("スナップショット保存中: family_id={}, todo_id={}", family_id, todo_id);
+        info!(
+            "スナップショット保存中: family_id={}, todo_id={}",
+            family_id, todo_id
+        );
 
         let snapshot_item = SnapshotItem::new(
             family_id.to_string(),
@@ -401,14 +487,16 @@ impl SnapshotRepository {
         );
 
         let snapshot_id = snapshot_item.snapshot_id.clone();
-        let dynamodb_item = snapshot_item.to_dynamodb_item()
+        let dynamodb_item = snapshot_item
+            .to_dynamodb_item()
             .map_err(|e| TodoError::Internal(format!("DynamoDBアイテム変換エラー: {}", e)))?;
 
         let attr_map = dynamodb_item.to_attribute_map();
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .put_item()
                     .table_name(self.db.table_name())
                     .set_item(Some(attr_map.clone()))
@@ -420,7 +508,8 @@ impl SnapshotRepository {
                 Ok(())
             },
             None,
-        ).await?;
+        )
+        .await?;
 
         Ok(snapshot_id)
     }
@@ -431,14 +520,19 @@ impl SnapshotRepository {
         family_id: &str,
         todo_id: &TodoId,
     ) -> Result<Option<SnapshotData>, TodoError> {
-        info!("最新スナップショット取得中: family_id={}, todo_id={}", family_id, todo_id);
+        info!(
+            "最新スナップショット取得中: family_id={}, todo_id={}",
+            family_id, todo_id
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk_prefix = format!("TODO#SNAPSHOT#{}", todo_id.as_str());
 
         retry_dynamodb_operation(
             || async {
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .query()
                     .table_name(self.db.table_name())
                     .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
@@ -453,12 +547,22 @@ impl SnapshotRepository {
                 if let Some(items) = response.items {
                     if let Some(item) = items.first() {
                         let dynamodb_item = crate::models::DynamoDbItem::from_attribute_map(item)
-                            .map_err(|e| TodoError::Internal(format!("アイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                            TodoError::Internal(format!("アイテム変換エラー: {}", e))
+                        })?;
 
                         let snapshot_item = SnapshotItem::from_dynamodb_item(&dynamodb_item)
-                            .map_err(|e| TodoError::Internal(format!("スナップショットアイテム変換エラー: {}", e)))?;
+                            .map_err(|e| {
+                                TodoError::Internal(format!(
+                                    "スナップショットアイテム変換エラー: {}",
+                                    e
+                                ))
+                            })?;
 
-                        debug!("最新スナップショット取得完了: {}", snapshot_item.snapshot_id);
+                        debug!(
+                            "最新スナップショット取得完了: {}",
+                            snapshot_item.snapshot_id
+                        );
                         return Ok(Some(snapshot_item.data));
                     }
                 }
@@ -467,7 +571,8 @@ impl SnapshotRepository {
                 Ok(None)
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 古いスナップショットにTTLを設定
@@ -478,8 +583,10 @@ impl SnapshotRepository {
         keep_count: usize,
         ttl_days: u32,
     ) -> Result<(), TodoError> {
-        info!("古いスナップショットTTL設定中: family_id={}, todo_id={}, keep_count={}", 
-              family_id, todo_id, keep_count);
+        info!(
+            "古いスナップショットTTL設定中: family_id={}, todo_id={}, keep_count={}",
+            family_id, todo_id, keep_count
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk_prefix = format!("TODO#SNAPSHOT#{}", todo_id.as_str());
@@ -487,7 +594,9 @@ impl SnapshotRepository {
         retry_dynamodb_operation(
             || async {
                 // すべてのスナップショットを取得
-                let response = self.db.client()
+                let response = self
+                    .db
+                    .client()
                     .query()
                     .table_name(self.db.table_name())
                     .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
@@ -500,34 +609,44 @@ impl SnapshotRepository {
 
                 if let Some(items) = response.items {
                     if items.len() > keep_count {
-                        let ttl_timestamp = chrono::Utc::now().timestamp() + (ttl_days as i64 * 24 * 60 * 60);
+                        let ttl_timestamp =
+                            chrono::Utc::now().timestamp() + (ttl_days as i64 * 24 * 60 * 60);
 
                         // 保持数を超えた古いスナップショットにTTLを設定
                         for item in items.iter().skip(keep_count) {
-                            let sk = item.get("SK")
-                                .and_then(|v| v.as_s().ok())
-                                .ok_or_else(|| TodoError::Internal("SKが見つかりません".to_string()))?;
+                            let sk =
+                                item.get("SK").and_then(|v| v.as_s().ok()).ok_or_else(|| {
+                                    TodoError::Internal("SKが見つかりません".to_string())
+                                })?;
 
-                            self.db.client()
+                            self.db
+                                .client()
                                 .update_item()
                                 .table_name(self.db.table_name())
                                 .key("PK", AttributeValue::S(pk.clone()))
                                 .key("SK", AttributeValue::S(sk.clone()))
                                 .update_expression("SET TTL = :ttl")
-                                .expression_attribute_values(":ttl", AttributeValue::N(ttl_timestamp.to_string()))
+                                .expression_attribute_values(
+                                    ":ttl",
+                                    AttributeValue::N(ttl_timestamp.to_string()),
+                                )
                                 .send()
                                 .await
                                 .map_err(|e| self.db.convert_error(e))?;
                         }
 
-                        debug!("古いスナップショットTTL設定完了: {} 件", items.len() - keep_count);
+                        debug!(
+                            "古いスナップショットTTL設定完了: {} 件",
+                            items.len() - keep_count
+                        );
                     }
                 }
 
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 
     /// 特定のスナップショットを削除
@@ -537,15 +656,18 @@ impl SnapshotRepository {
         todo_id: &TodoId,
         snapshot_id: &str,
     ) -> Result<(), TodoError> {
-        info!("スナップショット削除中: family_id={}, todo_id={}, snapshot_id={}", 
-              family_id, todo_id, snapshot_id);
+        info!(
+            "スナップショット削除中: family_id={}, todo_id={}, snapshot_id={}",
+            family_id, todo_id, snapshot_id
+        );
 
         let pk = format!("FAMILY#{}", family_id);
         let sk = format!("TODO#SNAPSHOT#{}#{}", todo_id.as_str(), snapshot_id);
 
         retry_dynamodb_operation(
             || async {
-                self.db.client()
+                self.db
+                    .client()
                     .delete_item()
                     .table_name(self.db.table_name())
                     .key("PK", AttributeValue::S(pk.clone()))
@@ -558,15 +680,16 @@ impl SnapshotRepository {
                 Ok(())
             },
             None,
-        ).await
+        )
+        .await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::{Todo, TodoEvent, TodoId};
     use shared::Config;
-    use domain::{TodoEvent, TodoId, Todo};
 
     async fn setup_test_client() -> DynamoDbClient {
         let config = Config {
@@ -619,7 +742,11 @@ mod tests {
         let todo = Todo::from_created_event(&event).unwrap();
 
         // 実際のDynamoDB Localが動いていない場合はスキップ
-        if repo.save_projection("test_family", todo.clone()).await.is_ok() {
+        if repo
+            .save_projection("test_family", todo.clone())
+            .await
+            .is_ok()
+        {
             let retrieved_todo = repo.get_projection("test_family", &todo_id).await.unwrap();
             assert!(retrieved_todo.is_some());
             assert_eq!(retrieved_todo.unwrap().id, todo_id);
@@ -648,8 +775,15 @@ mod tests {
         };
 
         // 実際のDynamoDB Localが動いていない場合はスキップ
-        if repo.save_snapshot("test_family", &todo_id, snapshot_data.clone(), Some(30)).await.is_ok() {
-            let retrieved_snapshot = repo.get_latest_snapshot("test_family", &todo_id).await.unwrap();
+        if repo
+            .save_snapshot("test_family", &todo_id, snapshot_data.clone(), Some(30))
+            .await
+            .is_ok()
+        {
+            let retrieved_snapshot = repo
+                .get_latest_snapshot("test_family", &todo_id)
+                .await
+                .unwrap();
             assert!(retrieved_snapshot.is_some());
             let snapshot = retrieved_snapshot.unwrap();
             assert_eq!(snapshot.todo.id, todo_id);
@@ -672,7 +806,10 @@ mod tests {
         assert!(projection_keys.sk.starts_with("TODO#CURRENT#"));
 
         let active_keys = crate::models::DynamoDbKeys::for_active_todo(family_id, todo_id.as_str());
-        assert_eq!(active_keys.gsi1_pk, Some("FAMILY#test_family#ACTIVE".to_string()));
+        assert_eq!(
+            active_keys.gsi1_pk,
+            Some("FAMILY#test_family#ACTIVE".to_string())
+        );
         assert_eq!(active_keys.gsi1_sk, Some(todo_id.as_str().to_string()));
     }
 }
