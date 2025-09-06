@@ -3,9 +3,12 @@ use infrastructure::EventRepository;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use shared::{trace_lambda_handler, tracing::init_tracing, AppError};
+use shared::{
+    telemetry::PerformanceTracker, trace_lambda_handler, tracing::init_tracing, AppError,
+    BusinessMetrics, MetricsClient,
+};
 use std::collections::HashMap;
-use tracing::info;
+use tracing::{error, info};
 
 /// API Gateway プロキシリクエスト構造体
 #[derive(Debug, Deserialize)]
@@ -126,11 +129,36 @@ async fn function_handler(
 
             let event_repo = EventRepository::new(db_client);
 
+            // CloudWatchメトリクスクライアントを初期化
+            let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                .load()
+                .await;
+            let cloudwatch_client = aws_sdk_cloudwatch::Client::new(&aws_config);
+            let metrics_client = MetricsClient::new(
+                cloudwatch_client,
+                "FamilyTodo/CommandHandler".to_string(),
+                config.environment.clone(),
+            );
+
+            // パフォーマンス測定開始
+            let mut perf_context = HashMap::new();
+            perf_context.insert("Method".to_string(), payload.http_method.clone());
+            perf_context.insert("Path".to_string(), payload.path.clone());
+            let perf_tracker =
+                PerformanceTracker::start("CommandHandler".to_string(), perf_context);
+
             // リクエストを処理
-            let response = handle_request(&payload, &event_repo).await.map_err(|e| {
-                error!("リクエスト処理エラー: {}", e);
-                Error::from(format!("処理エラー: {e}"))
-            })?;
+            let response = handle_request(&payload, &event_repo, &metrics_client)
+                .await
+                .map_err(|e| {
+                    error!("リクエスト処理エラー: {}", e);
+                    Error::from(format!("処理エラー: {e}"))
+                })?;
+
+            // パフォーマンス測定終了
+            perf_tracker
+                .finish(&metrics_client, response.status_code < 400)
+                .await;
 
             info!("CommandHandler完了: status={}", response.status_code);
             Ok(response)
@@ -142,6 +170,7 @@ async fn function_handler(
 async fn handle_request(
     request: &ApiGatewayProxyRequest,
     event_repo: &EventRepository,
+    metrics_client: &MetricsClient,
 ) -> Result<ApiGatewayProxyResponse, AppError> {
     // Lambda Authorizer からユーザー情報を抽出
     let (user_id, family_id) = extract_user_info_from_authorizer(request)?;
@@ -155,7 +184,7 @@ async fn handle_request(
     let command = parse_command(request)?;
 
     // コマンドを実行
-    execute_command(command, &user_id, &family_id, event_repo).await
+    execute_command(command, &user_id, &family_id, event_repo, metrics_client).await
 }
 
 /// リクエストからコマンドをパース
@@ -290,6 +319,7 @@ async fn execute_command(
     user_id: &str,
     family_id: &str,
     event_repo: &EventRepository,
+    metrics_client: &MetricsClient,
 ) -> Result<ApiGatewayProxyResponse, AppError> {
     match command {
         Command::CreateTodo {
@@ -322,6 +352,12 @@ async fn execute_command(
 
             // イベントを保存
             event_repo.save_event(family_id, event).await?;
+
+            // メトリクスを送信
+            let metric = BusinessMetrics::todo_created(family_id, user_id);
+            if let Err(e) = metrics_client.put_metrics_batch(vec![metric]).await {
+                error!("ToDo作成メトリクス送信エラー: {}", e);
+            }
 
             info!("ToDo作成完了: todo_id={}", todo_id);
 
@@ -364,6 +400,12 @@ async fn execute_command(
             // イベントを保存
             event_repo.save_event(family_id, event).await?;
 
+            // メトリクスを送信
+            let metric = BusinessMetrics::todo_updated(family_id, user_id);
+            if let Err(e) = metrics_client.put_metrics_batch(vec![metric]).await {
+                error!("ToDo更新メトリクス送信エラー: {}", e);
+            }
+
             info!("ToDo更新完了: todo_id={}", todo_id);
 
             Ok(create_success_response(
@@ -382,6 +424,12 @@ async fn execute_command(
             // イベントを保存
             event_repo.save_event(family_id, event).await?;
 
+            // メトリクスを送信
+            let metric = BusinessMetrics::todo_completed(family_id, user_id);
+            if let Err(e) = metrics_client.put_metrics_batch(vec![metric]).await {
+                error!("ToDo完了メトリクス送信エラー: {}", e);
+            }
+
             info!("ToDo完了完了: todo_id={}", todo_id);
 
             Ok(create_success_response(
@@ -399,6 +447,12 @@ async fn execute_command(
 
             // イベントを保存
             event_repo.save_event(family_id, event).await?;
+
+            // メトリクスを送信
+            let metric = BusinessMetrics::todo_deleted(family_id, user_id);
+            if let Err(e) = metrics_client.put_metrics_batch(vec![metric]).await {
+                error!("ToDo削除メトリクス送信エラー: {}", e);
+            }
 
             info!("ToDo削除完了: todo_id={}", todo_id);
 

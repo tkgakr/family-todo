@@ -1,7 +1,8 @@
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_dynamodb::Client;
-use shared::{AppError, Config};
+use shared::{AppError, BusinessMetrics, Config, MetricsClient};
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::{error, info, warn};
 
 /// DynamoDB クライアントのラッパー
@@ -11,6 +12,94 @@ pub struct DynamoDbClient {
     client: Arc<Client>,
     table_name: String,
     region: String,
+}
+
+/// DynamoDB操作のメトリクス付きラッパー
+#[derive(Clone)]
+pub struct MetricsEnabledDynamoDbClient {
+    client: DynamoDbClient,
+    metrics_client: Option<MetricsClient>,
+}
+
+impl MetricsEnabledDynamoDbClient {
+    /// メトリクス機能付きクライアントを作成
+    pub fn new(client: DynamoDbClient, metrics_client: Option<MetricsClient>) -> Self {
+        Self {
+            client,
+            metrics_client,
+        }
+    }
+
+    /// 基本クライアントへの参照を取得
+    pub fn client(&self) -> &DynamoDbClient {
+        &self.client
+    }
+
+    /// テーブル名を取得
+    pub fn table_name(&self) -> &str {
+        self.client.table_name()
+    }
+
+    /// DynamoDB エラーを AppError に変換
+    pub fn convert_error(&self, error: impl std::fmt::Display) -> AppError {
+        self.client.convert_error(error)
+    }
+
+    /// DynamoDB操作の実行時間を測定してメトリクスを送信
+    pub async fn execute_with_metrics<T, F, Fut>(
+        &self,
+        operation_name: &str,
+        operation: F,
+    ) -> Result<T, AppError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T, AppError>>,
+    {
+        let start_time = Instant::now();
+        let result = operation().await;
+        let duration_ms = start_time.elapsed().as_millis() as f64;
+
+        // メトリクスを送信
+        if let Some(metrics_client) = &self.metrics_client {
+            let metric = BusinessMetrics::dynamodb_operation_duration(
+                self.client.table_name(),
+                operation_name,
+                duration_ms,
+            );
+
+            if let Err(e) = metrics_client.put_metrics_batch(vec![metric]).await {
+                error!(
+                    operation = operation_name,
+                    duration_ms = duration_ms,
+                    error = %e,
+                    "DynamoDB操作メトリクス送信エラー"
+                );
+            }
+        }
+
+        // 操作結果をログ出力
+        match &result {
+            Ok(_) => {
+                info!(
+                    operation = operation_name,
+                    table = self.client.table_name(),
+                    duration_ms = duration_ms,
+                    "DynamoDB操作成功"
+                );
+            }
+            Err(e) => {
+                error!(
+                    operation = operation_name,
+                    table = self.client.table_name(),
+                    duration_ms = duration_ms,
+                    error = %e,
+                    "DynamoDB操作失敗"
+                );
+            }
+        }
+
+        result
+    }
 }
 
 impl DynamoDbClient {

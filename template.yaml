@@ -389,6 +389,10 @@ Resources:
                 - xray:PutTraceSegments
                 - xray:PutTelemetryRecords
               Resource: "*"
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource: "*"
 
   QueryHandlerFunction:
     Type: AWS::Serverless::Function
@@ -412,6 +416,10 @@ Resources:
               Action:
                 - xray:PutTraceSegments
                 - xray:PutTelemetryRecords
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
               Resource: "*"
 
   EventProcessorFunction:
@@ -450,6 +458,10 @@ Resources:
               Action:
                 - xray:PutTraceSegments
                 - xray:PutTelemetryRecords
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
               Resource: "*"
 
   SnapshotManagerFunction:
@@ -596,11 +608,13 @@ Resources:
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${FamilyTodoApi}/*/*"
 
   # CloudWatch Alarms for Monitoring
+
+  # API Gateway アラーム
   ApiGateway4xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub "family-todo-api-4xx-errors-${Environment}"
-      AlarmDescription: "API Gateway 4xx errors"
+      AlarmDescription: "API Gateway 4xx errors - Client errors"
       MetricName: 4XXError
       Namespace: AWS/ApiGateway
       Statistic: Sum
@@ -612,12 +626,14 @@ Resources:
         - Name: ApiName
           Value: !Sub "family-todo-api-${Environment}"
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
 
   ApiGateway5xxAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub "family-todo-api-5xx-errors-${Environment}"
-      AlarmDescription: "API Gateway 5xx errors"
+      AlarmDescription: "API Gateway 5xx errors - Server errors"
       MetricName: 5XXError
       Namespace: AWS/ApiGateway
       Statistic: Sum
@@ -629,12 +645,14 @@ Resources:
         - Name: ApiName
           Value: !Sub "family-todo-api-${Environment}"
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
 
   ApiGatewayLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub "family-todo-api-latency-${Environment}"
-      AlarmDescription: "API Gateway high latency"
+      AlarmDescription: "API Gateway high latency (>1000ms)"
       MetricName: Latency
       Namespace: AWS/ApiGateway
       Statistic: Average
@@ -646,12 +664,34 @@ Resources:
         - Name: ApiName
           Value: !Sub "family-todo-api-${Environment}"
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
 
+  ApiGatewayP95LatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-api-p95-latency-${Environment}"
+      AlarmDescription: "API Gateway P95 latency exceeds 200ms"
+      MetricName: Latency
+      Namespace: AWS/ApiGateway
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 200
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ApiName
+          Value: !Sub "family-todo-api-${Environment}"
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # DynamoDB アラーム
   DynamoDBThrottleAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub "family-todo-dynamodb-throttles-${Environment}"
-      AlarmDescription: "DynamoDB throttling events"
+      AlarmDescription: "DynamoDB throttling events detected"
       MetricName: ThrottledRequests
       Namespace: AWS/DynamoDB
       Statistic: Sum
@@ -663,12 +703,57 @@ Resources:
         - Name: TableName
           Value: !Ref FamilyTodoTable
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
 
-  LambdaErrorAlarm:
+  DynamoDBReadLatencyAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: !Sub "family-todo-lambda-errors-${Environment}"
-      AlarmDescription: "Lambda function errors"
+      AlarmName: !Sub "family-todo-dynamodb-read-latency-${Environment}"
+      AlarmDescription: "DynamoDB read latency exceeds 10ms"
+      MetricName: SuccessfulRequestLatency
+      Namespace: AWS/DynamoDB
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref FamilyTodoTable
+        - Name: Operation
+          Value: Query
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  DynamoDBWriteLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-dynamodb-write-latency-${Environment}"
+      AlarmDescription: "DynamoDB write latency exceeds 20ms"
+      MetricName: SuccessfulRequestLatency
+      Namespace: AWS/DynamoDB
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 20
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: TableName
+          Value: !Ref FamilyTodoTable
+        - Name: Operation
+          Value: PutItem
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # Lambda 関数アラーム
+  CommandHandlerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-command-handler-errors-${Environment}"
+      AlarmDescription: "Command Handler Lambda errors"
       MetricName: Errors
       Namespace: AWS/Lambda
       Statistic: Sum
@@ -676,7 +761,109 @@ Resources:
       EvaluationPeriods: 1
       Threshold: 1
       ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CommandHandlerFunction
       TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  CommandHandlerDurationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-command-handler-duration-${Environment}"
+      AlarmDescription: "Command Handler Lambda duration exceeds 5 seconds"
+      MetricName: Duration
+      Namespace: AWS/Lambda
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5000
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CommandHandlerFunction
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  QueryHandlerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-query-handler-errors-${Environment}"
+      AlarmDescription: "Query Handler Lambda errors"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref QueryHandlerFunction
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  EventProcessorErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-event-processor-errors-${Environment}"
+      AlarmDescription: "Event Processor Lambda errors"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref EventProcessorFunction
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # カスタムメトリクスアラーム
+  TodoOperationErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-operation-error-rate-${Environment}"
+      AlarmDescription: "Todo operation error rate exceeds 0.1%"
+      MetricName: ErrorRate
+      Namespace: FamilyTodo/CommandHandler
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 0.1
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  OptimisticLockConflictAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "family-todo-optimistic-lock-conflicts-${Environment}"
+      AlarmDescription: "High number of optimistic lock conflicts"
+      MetricName: OptimisticLockConflicts
+      Namespace: FamilyTodo/CommandHandler
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  # SNS Topic for Alerts
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "family-todo-alerts-${Environment}"
+      DisplayName: !Sub "Family Todo Alerts - ${Environment}"
 
   # CloudWatch Dashboard
   FamilyTodoDashboard:
@@ -690,7 +877,7 @@ Resources:
               "type": "metric",
               "x": 0,
               "y": 0,
-              "width": 12,
+              "width": 8,
               "height": 6,
               "properties": {
                 "metrics": [
@@ -701,48 +888,136 @@ Resources:
                 "period": 300,
                 "stat": "Sum",
                 "region": "${AWS::Region}",
-                "title": "API Gateway Requests"
+                "title": "API Gateway Requests",
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
               }
             },
             {
               "type": "metric",
-              "x": 12,
+              "x": 8,
               "y": 0,
-              "width": 12,
+              "width": 8,
               "height": 6,
               "properties": {
                 "metrics": [
-                  [ "AWS/ApiGateway", "Latency", "ApiName", "family-todo-api-${Environment}" ]
+                  [ "AWS/ApiGateway", "Latency", "ApiName", "family-todo-api-${Environment}", { "stat": "Average" } ],
+                  [ "...", { "stat": "p95" } ],
+                  [ "...", { "stat": "p99" } ]
                 ],
                 "period": 300,
-                "stat": "Average",
                 "region": "${AWS::Region}",
-                "title": "API Gateway Latency"
+                "title": "API Gateway Latency",
+                "yAxis": {
+                  "left": {
+                    "min": 0,
+                    "max": 1000
+                  }
+                },
+                "annotations": {
+                  "horizontal": [
+                    {
+                      "label": "SLO Target (200ms p95)",
+                      "value": 200
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 16,
+              "y": 0,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "FamilyTodo/CommandHandler", "TodoOperations", "Operation", "CreateTodo" ],
+                  [ "...", "UpdateTodo" ],
+                  [ "...", "CompleteTodo" ],
+                  [ "...", "DeleteTodo" ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Todo Operations"
               }
             },
             {
               "type": "metric",
               "x": 0,
               "y": 6,
-              "width": 12,
+              "width": 8,
               "height": 6,
               "properties": {
                 "metrics": [
                   [ "AWS/Lambda", "Invocations", "FunctionName", "family-todo-command-handler-${Environment}" ],
                   [ ".", "Errors", ".", "." ],
-                  [ ".", "Duration", ".", "." ]
+                  [ ".", "Throttles", ".", "." ]
                 ],
                 "period": 300,
                 "stat": "Sum",
                 "region": "${AWS::Region}",
-                "title": "Lambda Metrics"
+                "title": "Command Handler Lambda"
               }
             },
             {
               "type": "metric",
-              "x": 12,
+              "x": 8,
               "y": 6,
-              "width": 12,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "family-todo-command-handler-${Environment}", { "stat": "Average" } ],
+                  [ "...", { "stat": "p95" } ],
+                  [ "...", { "stat": "p99" } ]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}",
+                "title": "Lambda Duration",
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                },
+                "annotations": {
+                  "horizontal": [
+                    {
+                      "label": "Cold Start Target (500ms p99)",
+                      "value": 500
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 16,
+              "y": 6,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "family-todo-query-handler-${Environment}" ],
+                  [ ".", "Errors", ".", "." ],
+                  [ "family-todo-event-processor-${Environment}", "Invocations", "FunctionName", "family-todo-event-processor-${Environment}" ],
+                  [ ".", "Errors", ".", "." ]
+                ],
+                "period": 300,
+                "stat": "Sum",
+                "region": "${AWS::Region}",
+                "title": "Other Lambda Functions"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 8,
               "height": 6,
               "properties": {
                 "metrics": [
@@ -752,7 +1027,76 @@ Resources:
                 "period": 300,
                 "stat": "Sum",
                 "region": "${AWS::Region}",
-                "title": "DynamoDB Capacity"
+                "title": "DynamoDB Capacity Usage"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 8,
+              "y": 12,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "SuccessfulRequestLatency", "TableName", "${FamilyTodoTable}", "Operation", "Query" ],
+                  [ "...", "PutItem" ],
+                  [ "...", "UpdateItem" ],
+                  [ "...", "GetItem" ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Latency",
+                "yAxis": {
+                  "left": {
+                    "min": 0,
+                    "max": 50
+                  }
+                },
+                "annotations": {
+                  "horizontal": [
+                    {
+                      "label": "Read SLO (10ms)",
+                      "value": 10
+                    },
+                    {
+                      "label": "Write SLO (20ms)",
+                      "value": 20
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 16,
+              "y": 12,
+              "width": 8,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "FamilyTodo/CommandHandler", "ErrorRate", "Service", "CommandHandler" ],
+                  [ "FamilyTodo/CommandHandler", "OptimisticLockConflicts" ],
+                  [ "FamilyTodo/CommandHandler", "ApiResponseTime", "Method", "POST" ],
+                  [ "...", "PUT" ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Custom Business Metrics"
+              }
+            },
+            {
+              "type": "log",
+              "x": 0,
+              "y": 18,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "query": "SOURCE '/aws/lambda/family-todo-command-handler-${Environment}' | fields @timestamp, @message\n| filter @message like /ERROR/\n| sort @timestamp desc\n| limit 20",
+                "region": "${AWS::Region}",
+                "title": "Recent Errors",
+                "view": "table"
               }
             }
           ]
@@ -812,3 +1156,9 @@ Outputs:
     Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=FamilyTodo-${Environment}"
     Export:
       Name: !Sub "${AWS::StackName}-DashboardUrl"
+
+  AlertTopicArn:
+    Description: SNS Topic ARN for alerts
+    Value: !Ref AlertTopic
+    Export:
+      Name: !Sub "${AWS::StackName}-AlertTopicArn"

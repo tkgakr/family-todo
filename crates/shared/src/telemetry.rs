@@ -1,3 +1,4 @@
+use crate::metrics::MetricsClient;
 use lambda_runtime::Context;
 use std::collections::HashMap;
 use tracing::{error, info, instrument, warn};
@@ -141,7 +142,7 @@ pub fn trace_http_request(
     span
 }
 
-/// カスタムメトリクスを記録
+/// カスタムメトリクスを記録（ログ出力のみ - 実際の送信は MetricsClient を使用）
 pub fn record_custom_metric(name: &str, value: f64, attributes: HashMap<String, String>) {
     info!(
         metric_name = name,
@@ -149,6 +150,56 @@ pub fn record_custom_metric(name: &str, value: f64, attributes: HashMap<String, 
         ?attributes,
         "Custom metric recorded"
     );
+}
+
+/// パフォーマンス測定とメトリクス送信を行うヘルパー
+pub struct PerformanceTracker {
+    start_time: std::time::Instant,
+    operation_name: String,
+    context: HashMap<String, String>,
+}
+
+impl PerformanceTracker {
+    /// 新しいパフォーマンストラッカーを開始
+    pub fn start(operation_name: String, context: HashMap<String, String>) -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+            operation_name,
+            context,
+        }
+    }
+
+    /// 測定を終了し、メトリクスを送信
+    pub async fn finish(self, metrics_client: &MetricsClient, success: bool) {
+        let duration_ms = self.start_time.elapsed().as_millis() as f64;
+
+        // パフォーマンスメトリクスを送信
+        let mut dimensions = self.context;
+        dimensions.insert("Operation".to_string(), self.operation_name.clone());
+        dimensions.insert("Success".to_string(), success.to_string());
+
+        let metric = crate::metrics::CustomMetric::duration_ms(
+            "OperationDuration".to_string(),
+            duration_ms,
+            dimensions,
+        );
+
+        if let Err(e) = metrics_client.put_metrics_batch(vec![metric]).await {
+            error!(
+                operation = %self.operation_name,
+                duration_ms = duration_ms,
+                error = %e,
+                "Failed to send performance metric"
+            );
+        } else {
+            info!(
+                operation = %self.operation_name,
+                duration_ms = duration_ms,
+                success = success,
+                "Performance metric sent"
+            );
+        }
+    }
 }
 
 /// エラーをトレースに記録
