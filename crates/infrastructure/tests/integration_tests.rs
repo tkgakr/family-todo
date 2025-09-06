@@ -1,7 +1,7 @@
 #![allow(clippy::uninlined_format_args)]
 #![allow(clippy::redundant_pattern_matching)]
 
-use domain::{Todo, TodoError, TodoEvent, TodoId};
+use domain::{Todo, TodoEvent, TodoId};
 use infrastructure::{
     DynamoDbClient, EventRepository, OptimisticLockService, ProjectionRepository,
 };
@@ -89,7 +89,7 @@ async fn test_optimistic_lock_basic_operations() {
                         )
                         .await
                     {
-                        Err(TodoError::ConcurrentModification) => {
+                        Err(shared::AppError::ConcurrentModification) => {
                             println!("✓ バージョン競合検出成功");
                         }
                         _ => panic!("バージョン競合が検出されませんでした"),
@@ -142,46 +142,36 @@ async fn test_concurrent_updates_with_retry() {
             let todo_id3 = todo_id.clone();
 
             let handle1 = tokio::spawn(async move {
+                let update_event = TodoEvent::new_todo_updated(
+                    todo_id1.clone(),
+                    Some(format!("更新1_{}", chrono::Utc::now().timestamp_millis())),
+                    None,
+                    "user1".to_string(),
+                );
                 service1
-                    .update_todo_with_retry(
-                        &family_id1,
-                        &todo_id1,
-                        5, // 最大5回リトライ
-                        |todo| {
-                            Ok(TodoEvent::new_todo_updated(
-                                todo.id.clone(),
-                                Some(format!("更新1_{}", chrono::Utc::now().timestamp_millis())),
-                                None,
-                                "user1".to_string(),
-                            ))
-                        },
-                    )
+                    .update_todo_with_lock(&family_id1, &todo_id1, 1, update_event)
                     .await
             });
 
             let handle2 = tokio::spawn(async move {
                 sleep(Duration::from_millis(10)).await; // 少し遅延
+                let update_event2 = TodoEvent::new_todo_updated(
+                    todo_id2.clone(),
+                    Some(format!("更新2_{}", chrono::Utc::now().timestamp_millis())),
+                    None,
+                    "user2".to_string(),
+                );
                 service2
-                    .update_todo_with_retry(&family_id2, &todo_id2, 5, |todo| {
-                        Ok(TodoEvent::new_todo_updated(
-                            todo.id.clone(),
-                            Some(format!("更新2_{}", chrono::Utc::now().timestamp_millis())),
-                            None,
-                            "user2".to_string(),
-                        ))
-                    })
+                    .update_todo_with_lock(&family_id2, &todo_id2, 1, update_event2)
                     .await
             });
 
             let handle3 = tokio::spawn(async move {
                 sleep(Duration::from_millis(20)).await; // さらに遅延
+                let complete_event =
+                    TodoEvent::new_todo_completed(todo_id3.clone(), "user3".to_string());
                 service3
-                    .update_todo_with_retry(&family_id3, &todo_id3, 5, |todo| {
-                        Ok(TodoEvent::new_todo_completed(
-                            todo.id.clone(),
-                            "user3".to_string(),
-                        ))
-                    })
+                    .update_todo_with_lock(&family_id3, &todo_id3, 1, complete_event)
                     .await
             });
 
@@ -321,7 +311,7 @@ async fn test_error_handling_and_retry() {
         .update_todo_with_lock(&family_id, &non_existent_todo_id, 1, update_event)
         .await
     {
-        Err(TodoError::NotFound(_)) => {
+        Err(shared::AppError::NotFound(_)) => {
             println!("✓ 存在しないToDo更新エラー検出成功");
         }
         Err(e) => {
@@ -349,13 +339,17 @@ async fn test_error_handling_and_retry() {
         .is_ok()
     {
         // 無効なタイトル（空文字）での更新を試行
+        let invalid_event = TodoEvent::new_todo_updated(
+            todo_id.clone(),
+            Some("".to_string()), // 空のタイトル
+            None,
+            "user123".to_string(),
+        );
         match service
-            .update_todo_with_retry(&family_id, &todo_id, 3, |_todo| {
-                Err(TodoError::Validation("無効なデータ".to_string()))
-            })
+            .update_todo_with_lock(&family_id, &todo_id, 1, invalid_event)
             .await
         {
-            Err(TodoError::Validation(_)) => {
+            Err(shared::AppError::Validation(_)) => {
                 println!("✓ バリデーションエラー検出成功");
             }
             _ => println!("⚠ バリデーションエラーが期待通りに発生しませんでした"),
@@ -405,17 +399,16 @@ async fn test_performance_basic() {
             let family_id_clone = family_id.clone();
             let todo_id_clone = todo_id.clone();
 
-            let handle: tokio::task::JoinHandle<Result<Todo, TodoError>> =
+            let handle: tokio::task::JoinHandle<Result<Todo, shared::AppError>> =
                 tokio::spawn(async move {
+                    let update_event = TodoEvent::new_todo_updated(
+                        todo_id_clone.clone(),
+                        Some(format!("並行更新 {}", i)),
+                        None,
+                        "perf_user".to_string(),
+                    );
                     service_clone
-                        .update_todo_with_retry(&family_id_clone, &todo_id_clone, 3, |todo| {
-                            Ok(TodoEvent::new_todo_updated(
-                                todo.id.clone(),
-                                Some(format!("並行更新 {}", i)),
-                                None,
-                                "perf_user".to_string(),
-                            ))
-                        })
+                        .update_todo_with_lock(&family_id_clone, &todo_id_clone, 1, update_event)
                         .await
                 });
 

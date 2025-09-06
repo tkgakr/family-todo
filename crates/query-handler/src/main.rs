@@ -1,11 +1,11 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use domain::{TodoEvent, TodoId};
-use infrastructure::{DynamoDbClient, EventRepository, ProjectionRepository};
+use infrastructure::{EventRepository, ProjectionRepository};
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use shared::{init_tracing, Config};
+use shared::{trace_lambda_handler, tracing::init_tracing};
 use std::collections::HashMap;
 use tracing::{error, info};
 
@@ -109,37 +109,49 @@ enum Query {
 async fn function_handler(
     event: LambdaEvent<ApiGatewayProxyRequest>,
 ) -> Result<ApiGatewayProxyResponse, Error> {
-    info!(
-        "QueryHandler開始: method={}, path={}",
-        event.payload.http_method, event.payload.path
-    );
+    let (payload, context) = event.into_parts();
 
-    // 設定を読み込み
-    let config = Config::from_env().map_err(|e| {
-        error!("設定読み込みエラー: {}", e);
-        Error::from(format!("設定エラー: {e}"))
-    })?;
+    // トレーシングでラップされたハンドラー実行
+    trace_lambda_handler!(
+        "query-handler",
+        payload,
+        context,
+        |payload: ApiGatewayProxyRequest, _context| async move {
+            info!(
+                "QueryHandler開始: method={}, path={}",
+                payload.http_method, payload.path
+            );
 
-    // DynamoDBクライアントを初期化
-    let db_client = DynamoDbClient::new(&config).await.map_err(|e| {
-        error!("DynamoDBクライアント初期化エラー: {}", e);
-        Error::from(format!("DynamoDBエラー: {e}"))
-    })?;
+            // 設定を読み込み
+            let config = shared::Config::from_env().map_err(|e| {
+                error!("設定読み込みエラー: {}", e);
+                Error::from(format!("設定エラー: {e}"))
+            })?;
 
-    let event_repo = EventRepository::new(db_client.clone());
-    let projection_repo = ProjectionRepository::new(db_client);
+            // DynamoDBクライアントを初期化
+            let db_client = infrastructure::DynamoDbClient::new(&config)
+                .await
+                .map_err(|e| {
+                    error!("DynamoDBクライアント初期化エラー: {}", e);
+                    Error::from(format!("DynamoDBエラー: {e}"))
+                })?;
 
-    // リクエストを処理
-    match handle_request(&event.payload, &event_repo, &projection_repo).await {
-        Ok(response) => {
-            info!("QueryHandler完了: status={}", response.status_code);
-            Ok(response)
+            let event_repo = EventRepository::new(db_client.clone());
+            let projection_repo = ProjectionRepository::new(db_client);
+
+            // リクエストを処理
+            match handle_request(&payload, &event_repo, &projection_repo).await {
+                Ok(response) => {
+                    info!("QueryHandler完了: status={}", response.status_code);
+                    Ok(response)
+                }
+                Err(e) => {
+                    error!("QueryHandlerエラー: {}", e);
+                    Ok(create_error_response(500, "内部サーバーエラー"))
+                }
+            }
         }
-        Err(e) => {
-            error!("QueryHandlerエラー: {}", e);
-            Ok(create_error_response(500, "内部サーバーエラー"))
-        }
-    }
+    )
 }
 
 /// リクエストを処理する
@@ -482,9 +494,18 @@ fn create_error_response(status_code: u16, message: &str) -> ApiGatewayProxyResp
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    init_tracing();
+    // OpenTelemetry トレーシングを初期化
+    if let Err(e) = init_tracing() {
+        eprintln!("トレーシング初期化エラー: {e}");
+        // トレーシング初期化に失敗してもアプリケーションは継続
+    }
 
-    run(service_fn(function_handler)).await
+    let result = run(service_fn(function_handler)).await;
+
+    // Lambda 終了時にトレーサーをシャットダウン
+    shared::tracing::shutdown_telemetry();
+
+    result
 }
 
 #[cfg(test)]

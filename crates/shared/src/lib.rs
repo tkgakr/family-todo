@@ -3,6 +3,7 @@ pub mod config;
 pub mod errors;
 pub mod lambda_error;
 pub mod retry;
+pub mod telemetry;
 pub mod tracing;
 
 pub use auth::*;

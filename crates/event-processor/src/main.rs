@@ -1,9 +1,11 @@
 use aws_lambda_events::event::dynamodb::{Event as DynamoDbEvent, EventRecord};
 
-use infrastructure::{DynamoDbClient, ProjectionRepository};
+#[cfg(test)]
+use infrastructure::DynamoDbClient;
+use infrastructure::ProjectionRepository;
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
-use shared::{init_tracing, Config};
+use shared::{trace_lambda_handler, tracing::init_tracing};
 use tracing::{debug, error, info, warn};
 
 /// DynamoDB Streams イベント処理のエラー型
@@ -152,44 +154,65 @@ impl EventProcessor {
 
 /// Lambda関数のエントリーポイント
 async fn function_handler(event: LambdaEvent<DynamoDbEvent>) -> Result<BatchItemFailures, Error> {
-    info!("EventProcessor Lambda関数開始");
+    let (payload, context) = event.into_parts();
 
-    // 設定を読み込み
-    let config = Config::from_env().map_err(|e| {
-        error!("設定読み込みエラー: {}", e);
-        Error::from(format!("設定エラー: {e}"))
-    })?;
+    // トレーシングでラップされたハンドラー実行
+    trace_lambda_handler!(
+        "event-processor",
+        payload,
+        context,
+        |payload: DynamoDbEvent, _context| async move {
+            info!("EventProcessor Lambda関数開始");
 
-    // DynamoDBクライアントを初期化
-    let db_client = DynamoDbClient::new(&config).await.map_err(|e| {
-        error!("DynamoDBクライアント初期化エラー: {}", e);
-        Error::from(format!("DynamoDBエラー: {e}"))
-    })?;
+            // 設定を読み込み
+            let config = shared::Config::from_env().map_err(|e| {
+                error!("設定読み込みエラー: {}", e);
+                Error::from(format!("設定エラー: {e}"))
+            })?;
 
-    // プロジェクションリポジトリを初期化
-    let projection_repo = ProjectionRepository::new(db_client);
+            // DynamoDBクライアントを初期化
+            let db_client = infrastructure::DynamoDbClient::new(&config)
+                .await
+                .map_err(|e| {
+                    error!("DynamoDBクライアント初期化エラー: {}", e);
+                    Error::from(format!("DynamoDBエラー: {e}"))
+                })?;
 
-    // EventProcessorを初期化
-    let processor = EventProcessor::new(projection_repo);
+            // プロジェクションリポジトリを初期化
+            let projection_repo = ProjectionRepository::new(db_client);
 
-    // イベントを処理
-    match processor.process_stream_event(event.payload).await {
-        Ok(result) => {
-            info!("EventProcessor Lambda関数完了");
-            Ok(result)
+            // EventProcessorを初期化
+            let processor = EventProcessor::new(projection_repo);
+
+            // イベントを処理
+            match processor.process_stream_event(payload).await {
+                Ok(result) => {
+                    info!("EventProcessor Lambda関数完了");
+                    Ok(result)
+                }
+                Err(e) => {
+                    error!("EventProcessor処理エラー: {}", e);
+                    Err(Error::from(format!("処理エラー: {e}")))
+                }
+            }
         }
-        Err(e) => {
-            error!("EventProcessor処理エラー: {}", e);
-            Err(Error::from(format!("処理エラー: {e}")))
-        }
-    }
+    )
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    init_tracing();
+    // OpenTelemetry トレーシングを初期化
+    if let Err(e) = init_tracing() {
+        eprintln!("トレーシング初期化エラー: {e}");
+        // トレーシング初期化に失敗してもアプリケーションは継続
+    }
 
-    run(service_fn(function_handler)).await
+    let result = run(service_fn(function_handler)).await;
+
+    // Lambda 終了時にトレーサーをシャットダウン
+    shared::tracing::shutdown_telemetry();
+
+    result
 }
 
 #[cfg(test)]

@@ -272,7 +272,9 @@ async fn should_create_snapshot(
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    init_tracing();
+    if let Err(e) = init_tracing() {
+        eprintln!("トレーシング初期化エラー: {e}");
+    }
 
     run(service_fn(function_handler)).await
 }

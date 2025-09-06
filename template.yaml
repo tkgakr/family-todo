@@ -25,6 +25,13 @@ Globals:
         COGNITO_USER_POOL_ID: !Ref FamilyTodoUserPool
         COGNITO_CLIENT_ID: !Ref FamilyTodoUserPoolClient
         COGNITO_IDENTITY_POOL_ID: !Ref FamilyTodoIdentityPool
+        # OpenTelemetry 設定
+        OTEL_SERVICE_NAME: family-todo-app
+        OTEL_SERVICE_VERSION: "0.1.0"
+        # X-Ray 設定
+        _X_AMZN_TRACE_ID: ""
+        AWS_XRAY_TRACING_NAME: family-todo-app
+        AWS_XRAY_CONTEXT_MISSING: LOG_ERROR
     Tracing: Active
     Timeout: 30
     MemorySize: 256
