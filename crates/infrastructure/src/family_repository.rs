@@ -1,12 +1,13 @@
-use crate::{retry_dynamodb_operation, DynamoDbClient};
+use crate::DynamoDbClient;
 use aws_sdk_dynamodb::types::AttributeValue;
 use chrono::{DateTime, Utc};
 use domain::{
-    DomainError, FamilyEvent, FamilyId, FamilyInvitation, FamilyMember, InvitationToken, UserId,
+    DomainError, FamilyId, FamilyInvitation, FamilyMember, FamilyRole, InvitationToken, UserId,
 };
 use serde::{Deserialize, Serialize};
+use shared::{AppError, DynamoDbRetryExecutor, RetryResult};
 use std::collections::HashMap;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// 家族招待レコード（DynamoDB用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,212 +19,96 @@ pub struct InvitationRecord {
     pub invited_by: String,
     pub expires_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
-    pub is_used: bool,
+    pub used: bool,
 }
 
-impl From<&FamilyInvitation> for InvitationRecord {
-    fn from(invitation: &FamilyInvitation) -> Self {
+impl InvitationRecord {
+    pub fn new(invitation: &FamilyInvitation) -> Self {
         Self {
             invitation_token: invitation.invitation_token.as_str().to_string(),
             family_id: invitation.family_id.as_str().to_string(),
             email: invitation.email.clone(),
-            role: invitation.role.as_str().to_string(),
+            role: invitation.role.to_string(),
             invited_by: invitation.invited_by.as_str().to_string(),
             expires_at: invitation.expires_at,
             created_at: invitation.created_at,
-            is_used: invitation.is_used,
+            used: invitation.is_used,
         }
     }
-}
 
-impl TryFrom<InvitationRecord> for FamilyInvitation {
-    type Error = DomainError;
-
-    fn try_from(record: InvitationRecord) -> Result<Self, Self::Error> {
+    pub fn to_family_invitation(&self) -> Result<FamilyInvitation, DomainError> {
         Ok(FamilyInvitation {
-            invitation_token: InvitationToken::from_string(record.invitation_token)?,
-            family_id: FamilyId::from_string(record.family_id)?,
-            email: record.email,
-            role: domain::FamilyRole::from_string(&record.role)?,
-            invited_by: UserId::from_string(record.invited_by)?,
-            expires_at: record.expires_at,
-            created_at: record.created_at,
-            is_used: record.is_used,
+            invitation_token: InvitationToken::from_string(self.invitation_token.clone())?,
+            family_id: FamilyId::from_string(self.family_id.clone())?,
+            email: self.email.clone(),
+            role: FamilyRole::from_string(&self.role)?,
+            invited_by: UserId::from_string(self.invited_by.clone())?,
+            expires_at: self.expires_at,
+            created_at: self.created_at,
+            is_used: self.used,
         })
     }
 }
 
 /// 家族メンバーレコード（DynamoDB用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemberRecord {
+pub struct FamilyMemberRecord {
     pub user_id: String,
-    pub email: String,
+    pub family_id: String,
     pub display_name: String,
+    pub email: String,
     pub role: String,
     pub joined_at: DateTime<Utc>,
-    pub is_active: bool,
+    pub last_active_at: Option<DateTime<Utc>>,
 }
 
-impl From<&FamilyMember> for MemberRecord {
-    fn from(member: &FamilyMember) -> Self {
+impl FamilyMemberRecord {
+    pub fn new(member: &FamilyMember, family_id: &FamilyId) -> Self {
         Self {
             user_id: member.user_id.as_str().to_string(),
-            email: member.email.clone(),
+            family_id: family_id.as_str().to_string(),
             display_name: member.display_name.clone(),
-            role: member.role.as_str().to_string(),
+            email: member.email.clone(),
+            role: member.role.to_string(),
             joined_at: member.joined_at,
-            is_active: member.is_active,
+            last_active_at: None, // FamilyMemberにはlast_active_atフィールドがないため、Noneを設定
         }
     }
-}
 
-impl TryFrom<MemberRecord> for FamilyMember {
-    type Error = DomainError;
-
-    fn try_from(record: MemberRecord) -> Result<Self, Self::Error> {
+    pub fn to_family_member(&self) -> Result<FamilyMember, DomainError> {
         Ok(FamilyMember {
-            user_id: UserId::from_string(record.user_id)?,
-            email: record.email,
-            display_name: record.display_name,
-            role: domain::FamilyRole::from_string(&record.role)?,
-            joined_at: record.joined_at,
-            is_active: record.is_active,
+            user_id: UserId::from_string(self.user_id.clone())?,
+            display_name: self.display_name.clone(),
+            email: self.email.clone(),
+            role: FamilyRole::from_string(&self.role)?,
+            joined_at: self.joined_at,
+            is_active: true, // デフォルトでアクティブ
         })
     }
 }
 
-/// 家族イベントリポジトリ
-/// 家族メンバー管理に関するイベントの保存・取得機能を提供
+/// 家族リポジトリ
+/// 家族メンバー管理と招待機能を提供
 #[derive(Clone)]
-pub struct FamilyEventRepository {
+pub struct FamilyRepository {
     db: DynamoDbClient,
 }
 
-impl FamilyEventRepository {
+impl FamilyRepository {
     pub fn new(db: DynamoDbClient) -> Self {
         Self { db }
     }
 
-    /// 家族イベントを保存する
-    pub async fn save_family_event(&self, event: FamilyEvent) -> Result<(), DomainError> {
+    /// 家族招待を保存
+    pub async fn save_invitation(&self, invitation: &FamilyInvitation) -> Result<(), AppError> {
         info!(
-            "家族イベントを保存中: family_id={}, event_id={}",
-            event.family_id(),
-            event.event_id()
+            "家族招待保存中: family_id={}, email={}",
+            invitation.family_id, invitation.email
         );
 
-        let pk = format!("FAMILY#{}", event.family_id());
-        let sk = format!("EVENT#{}", event.event_id());
-        let event_json = event.to_json()?;
-
-        let mut item = HashMap::new();
-        item.insert("PK".to_string(), AttributeValue::S(pk));
-        item.insert("SK".to_string(), AttributeValue::S(sk));
-        item.insert(
-            "EntityType".to_string(),
-            AttributeValue::S("FamilyEvent".to_string()),
-        );
-        item.insert("Data".to_string(), AttributeValue::S(event_json));
-        item.insert(
-            "CreatedAt".to_string(),
-            AttributeValue::S(event.timestamp().to_rfc3339()),
-        );
-
-        retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .put_item()
-                    .table_name(self.db.table_name())
-                    .set_item(Some(item.clone()))
-                    .condition_expression("attribute_not_exists(PK) AND attribute_not_exists(SK)")
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))?;
-
-                debug!("家族イベント保存完了: {}", event.event_id());
-                Ok(())
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("家族イベント保存エラー: {e}")))
-    }
-
-    /// 家族の全イベントを取得する
-    pub async fn get_family_events(
-        &self,
-        family_id: &str,
-    ) -> Result<Vec<FamilyEvent>, DomainError> {
-        info!("家族イベントを取得中: family_id={}", family_id);
-
-        let pk = format!("FAMILY#{family_id}");
-
-        let result = retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .query()
-                    .table_name(self.db.table_name())
-                    .key_condition_expression("PK = :pk AND begins_with(SK, :sk)")
-                    .expression_attribute_values(":pk", AttributeValue::S(pk.clone()))
-                    .expression_attribute_values(":sk", AttributeValue::S("EVENT#".to_string()))
-                    .filter_expression("EntityType = :entity_type")
-                    .expression_attribute_values(
-                        ":entity_type",
-                        AttributeValue::S("FamilyEvent".to_string()),
-                    )
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("家族イベント取得エラー: {e}")))?;
-
-        let mut events = Vec::new();
-        for item in result.items.unwrap_or_default() {
-            if let Some(data) = item.get("Data").and_then(|v| v.as_s().ok()) {
-                match serde_json::from_str::<FamilyEvent>(data) {
-                    Ok(event) => events.push(event),
-                    Err(e) => {
-                        error!("家族イベントデシリアライゼーションエラー: {}", e);
-                        continue;
-                    }
-                }
-            }
-        }
-
-        debug!("家族イベント取得完了: {} 件", events.len());
-        Ok(events)
-    }
-}
-
-/// 家族招待リポジトリ
-/// 招待の保存・取得・削除機能を提供
-#[derive(Clone)]
-pub struct FamilyInvitationRepository {
-    db: DynamoDbClient,
-}
-
-impl FamilyInvitationRepository {
-    pub fn new(db: DynamoDbClient) -> Self {
-        Self { db }
-    }
-
-    /// 招待を保存する
-    pub async fn save_invitation(&self, invitation: &FamilyInvitation) -> Result<(), DomainError> {
-        info!(
-            "招待を保存中: family_id={}, token={}",
-            invitation.family_id.as_str(),
-            invitation.invitation_token.as_str()
-        );
-
-        let record = InvitationRecord::from(invitation);
-        let pk = format!("FAMILY#{}", record.family_id);
-        let sk = format!("INVITATION#{}", record.invitation_token);
-        let ttl = record.expires_at.timestamp();
+        let record = InvitationRecord::new(invitation);
+        let pk = format!("INVITATION#{}", record.invitation_token);
+        let sk = "METADATA".to_string();
 
         let mut item = HashMap::new();
         item.insert("PK".to_string(), AttributeValue::S(pk));
@@ -234,381 +119,534 @@ impl FamilyInvitationRepository {
         );
         item.insert(
             "Data".to_string(),
-            AttributeValue::S(
-                serde_json::to_string(&record)
-                    .map_err(|e| DomainError::EventSerialization(e.to_string()))?,
-            ),
+            AttributeValue::S(serde_json::to_string(&record).map_err(|e| {
+                AppError::Serialization(format!("招待レコードシリアライゼーションエラー: {e}"))
+            })?),
         );
-        item.insert("TTL".to_string(), AttributeValue::N(ttl.to_string()));
+        item.insert(
+            "TTL".to_string(),
+            AttributeValue::N(record.expires_at.timestamp().to_string()),
+        );
         item.insert(
             "CreatedAt".to_string(),
             AttributeValue::S(record.created_at.to_rfc3339()),
         );
 
-        // GSI1 for token-based lookup
-        item.insert(
-            "GSI1PK".to_string(),
-            AttributeValue::S(format!("INVITATION#{}", record.invitation_token)),
-        );
-        item.insert(
-            "GSI1SK".to_string(),
-            AttributeValue::S(record.family_id.clone()),
-        );
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            self.db
+                .client()
+                .put_item()
+                .table_name(self.db.table_name())
+                .set_item(Some(item.clone()))
+                .condition_expression("attribute_not_exists(PK)")
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
 
-        retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .put_item()
-                    .table_name(self.db.table_name())
-                    .set_item(Some(item.clone()))
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))?;
+            debug!("家族招待保存完了: token={}", record.invitation_token);
+            Ok(())
+        })
+        .await;
 
-                debug!("招待保存完了: {}", record.invitation_token);
-                Ok(())
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("招待保存エラー: {e}")))
-    }
-
-    /// 招待トークンで招待を取得する
-    pub async fn get_invitation_by_token(
-        &self,
-        token: &str,
-    ) -> Result<Option<FamilyInvitation>, DomainError> {
-        info!("招待を取得中: token={}", token);
-
-        let result = retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .query()
-                    .table_name(self.db.table_name())
-                    .index_name("GSI1")
-                    .key_condition_expression("GSI1PK = :pk")
-                    .expression_attribute_values(
-                        ":pk",
-                        AttributeValue::S(format!("INVITATION#{token}")),
-                    )
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("招待取得エラー: {e}")))?;
-
-        let items = result.items.unwrap_or_default();
-        if items.is_empty() {
-            debug!("招待が見つかりません: token={}", token);
-            return Ok(None);
-        }
-
-        let item = &items[0];
-        if let Some(data) = item.get("Data").and_then(|v| v.as_s().ok()) {
-            let record: InvitationRecord = serde_json::from_str(data)
-                .map_err(|e| DomainError::EventDeserialization(e.to_string()))?;
-            let invitation = FamilyInvitation::try_from(record)?;
-            debug!("招待取得完了: token={}", token);
-            Ok(Some(invitation))
-        } else {
-            error!("招待データが無効です: token={}", token);
-            Err(DomainError::InvalidEvent(
-                "Invalid invitation data".to_string(),
-            ))
+        match result {
+            RetryResult::Success(()) => Ok(()),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
         }
     }
 
-    /// 家族の招待一覧を取得する
-    pub async fn list_family_invitations(
+    /// 招待トークンで招待情報を取得
+    pub async fn get_invitation(
         &self,
-        family_id: &str,
-    ) -> Result<Vec<FamilyInvitation>, DomainError> {
-        info!("家族の招待一覧を取得中: family_id={}", family_id);
+        token: &InvitationToken,
+    ) -> Result<Option<FamilyInvitation>, AppError> {
+        info!("招待情報取得中: token={}", token.as_str());
 
-        let pk = format!("FAMILY#{family_id}");
+        let pk = format!("INVITATION#{}", token.as_str());
+        let sk = "METADATA".to_string();
 
-        let result = retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .query()
-                    .table_name(self.db.table_name())
-                    .key_condition_expression("PK = :pk AND begins_with(SK, :sk)")
-                    .expression_attribute_values(":pk", AttributeValue::S(pk.clone()))
-                    .expression_attribute_values(
-                        ":sk",
-                        AttributeValue::S("INVITATION#".to_string()),
-                    )
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("招待一覧取得エラー: {e}")))?;
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            let response = self
+                .db
+                .client()
+                .get_item()
+                .table_name(self.db.table_name())
+                .key("PK", AttributeValue::S(pk.clone()))
+                .key("SK", AttributeValue::S(sk.clone()))
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
 
-        let mut invitations = Vec::new();
-        for item in result.items.unwrap_or_default() {
-            if let Some(data) = item.get("Data").and_then(|v| v.as_s().ok()) {
-                match serde_json::from_str::<InvitationRecord>(data) {
-                    Ok(record) => match FamilyInvitation::try_from(record) {
-                        Ok(invitation) => invitations.push(invitation),
-                        Err(e) => {
-                            error!("招待変換エラー: {}", e);
-                            continue;
-                        }
-                    },
-                    Err(e) => {
-                        error!("招待デシリアライゼーションエラー: {}", e);
-                        continue;
+            if let Some(item) = response.item {
+                if let Some(data_attr) = item.get("Data") {
+                    if let Ok(data_str) = data_attr.as_s() {
+                        let record: InvitationRecord =
+                            serde_json::from_str(data_str).map_err(|e| {
+                                AppError::Deserialization(format!(
+                                    "招待レコードデシリアライゼーションエラー: {e}"
+                                ))
+                            })?;
+
+                        let invitation = record.to_family_invitation().map_err(AppError::Domain)?;
+
+                        debug!("招待情報取得完了: token={}", token.as_str());
+                        return Ok(Some(invitation));
                     }
                 }
             }
+
+            debug!("招待情報が見つかりません: token={}", token.as_str());
+            Ok(None)
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(invitation) => Ok(invitation),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
         }
-
-        debug!("招待一覧取得完了: {} 件", invitations.len());
-        Ok(invitations)
     }
 
-    /// 招待を削除する
-    pub async fn delete_invitation(&self, family_id: &str, token: &str) -> Result<(), DomainError> {
-        info!("招待を削除中: family_id={}, token={}", family_id, token);
+    /// 招待を使用済みにマーク
+    pub async fn mark_invitation_used(&self, token: &InvitationToken) -> Result<(), AppError> {
+        info!("招待使用済みマーク中: token={}", token.as_str());
 
-        let pk = format!("FAMILY#{family_id}");
-        let sk = format!("INVITATION#{token}");
+        let pk = format!("INVITATION#{}", token.as_str());
+        let sk = "METADATA".to_string();
 
-        retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .delete_item()
-                    .table_name(self.db.table_name())
-                    .key("PK", AttributeValue::S(pk.clone()))
-                    .key("SK", AttributeValue::S(sk.clone()))
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))?;
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            self.db
+                .client()
+                .update_item()
+                .table_name(self.db.table_name())
+                .key("PK", AttributeValue::S(pk.clone()))
+                .key("SK", AttributeValue::S(sk.clone()))
+                .update_expression("SET #used = :used, #updated_at = :updated_at")
+                .condition_expression("attribute_exists(PK) AND #used = :false")
+                .expression_attribute_names("#used", "used")
+                .expression_attribute_names("#updated_at", "UpdatedAt")
+                .expression_attribute_values(":used", AttributeValue::Bool(true))
+                .expression_attribute_values(":false", AttributeValue::Bool(false))
+                .expression_attribute_values(
+                    ":updated_at",
+                    AttributeValue::S(Utc::now().to_rfc3339()),
+                )
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
 
-                debug!("招待削除完了: token={}", token);
-                Ok(())
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("招待削除エラー: {e}")))
+            debug!("招待使用済みマーク完了: token={}", token.as_str());
+            Ok(())
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(()) => Ok(()),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
+        }
     }
-}
 
-/// 家族メンバーリポジトリ
-/// メンバーの保存・取得・更新機能を提供
-#[derive(Clone)]
-pub struct FamilyMemberRepository {
-    db: DynamoDbClient,
-}
-
-impl FamilyMemberRepository {
-    pub fn new(db: DynamoDbClient) -> Self {
-        Self { db }
-    }
-
-    /// メンバーを保存する
-    pub async fn save_member(
+    /// 家族メンバーを追加
+    pub async fn add_family_member(
         &self,
-        family_id: &str,
+        family_id: &FamilyId,
         member: &FamilyMember,
-    ) -> Result<(), DomainError> {
+    ) -> Result<(), AppError> {
         info!(
-            "メンバーを保存中: family_id={}, user_id={}",
-            family_id,
-            member.user_id.as_str()
+            "家族メンバー追加中: family_id={}, user_id={}",
+            family_id, member.user_id
         );
 
-        let record = MemberRecord::from(member);
-        let pk = format!("FAMILY#{family_id}");
-        let sk = format!("MEMBER#{}", record.user_id);
+        let record = FamilyMemberRecord::new(member, family_id);
+        let pk = format!("FAMILY#{}", family_id.as_str());
+        let sk = format!("MEMBER#{}", member.user_id.as_str());
 
         let mut item = HashMap::new();
         item.insert("PK".to_string(), AttributeValue::S(pk));
         item.insert("SK".to_string(), AttributeValue::S(sk));
         item.insert(
             "EntityType".to_string(),
-            AttributeValue::S("Member".to_string()),
+            AttributeValue::S("FamilyMember".to_string()),
         );
         item.insert(
             "Data".to_string(),
-            AttributeValue::S(
-                serde_json::to_string(&record)
-                    .map_err(|e| DomainError::EventSerialization(e.to_string()))?,
-            ),
+            AttributeValue::S(serde_json::to_string(&record).map_err(|e| {
+                AppError::Serialization(format!("メンバーレコードシリアライゼーションエラー: {e}"))
+            })?),
         );
         item.insert(
             "CreatedAt".to_string(),
             AttributeValue::S(record.joined_at.to_rfc3339()),
         );
-
-        // GSI1 for user-based lookup
         item.insert(
-            "GSI1PK".to_string(),
-            AttributeValue::S(format!("USER#{}", record.user_id)),
-        );
-        item.insert(
-            "GSI1SK".to_string(),
-            AttributeValue::S(family_id.to_string()),
+            "UpdatedAt".to_string(),
+            AttributeValue::S(Utc::now().to_rfc3339()),
         );
 
-        retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .put_item()
-                    .table_name(self.db.table_name())
-                    .set_item(Some(item.clone()))
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))?;
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            self.db
+                .client()
+                .put_item()
+                .table_name(self.db.table_name())
+                .set_item(Some(item.clone()))
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
 
-                debug!("メンバー保存完了: {}", record.user_id);
-                Ok(())
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("メンバー保存エラー: {e}")))
+            debug!("家族メンバー追加完了: user_id={}", member.user_id);
+            Ok(())
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(()) => Ok(()),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
+        }
     }
 
-    /// 家族のメンバー一覧を取得する
-    pub async fn list_family_members(
+    /// 家族のすべてのメンバーを取得
+    pub async fn get_family_members(
         &self,
-        family_id: &str,
-    ) -> Result<Vec<FamilyMember>, DomainError> {
-        info!("家族メンバー一覧を取得中: family_id={}", family_id);
+        family_id: &FamilyId,
+    ) -> Result<Vec<FamilyMember>, AppError> {
+        info!("家族メンバー取得中: family_id={}", family_id);
 
-        let pk = format!("FAMILY#{family_id}");
+        let pk = format!("FAMILY#{}", family_id.as_str());
 
-        let result = retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .query()
-                    .table_name(self.db.table_name())
-                    .key_condition_expression("PK = :pk AND begins_with(SK, :sk)")
-                    .expression_attribute_values(":pk", AttributeValue::S(pk.clone()))
-                    .expression_attribute_values(":sk", AttributeValue::S("MEMBER#".to_string()))
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("メンバー一覧取得エラー: {e}")))?;
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            let response = self
+                .db
+                .client()
+                .query()
+                .table_name(self.db.table_name())
+                .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
+                .expression_attribute_values(":pk", AttributeValue::S(pk.clone()))
+                .expression_attribute_values(":sk_prefix", AttributeValue::S("MEMBER#".to_string()))
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
 
-        let mut members = Vec::new();
-        for item in result.items.unwrap_or_default() {
-            if let Some(data) = item.get("Data").and_then(|v| v.as_s().ok()) {
-                match serde_json::from_str::<MemberRecord>(data) {
-                    Ok(record) => match FamilyMember::try_from(record) {
-                        Ok(member) => members.push(member),
-                        Err(e) => {
-                            error!("メンバー変換エラー: {}", e);
-                            continue;
+            let mut members = Vec::new();
+            if let Some(items) = response.items {
+                for item in items {
+                    if let Some(data_attr) = item.get("Data") {
+                        if let Ok(data_str) = data_attr.as_s() {
+                            let record: FamilyMemberRecord = serde_json::from_str(data_str)
+                                .map_err(|e| {
+                                    AppError::Deserialization(format!(
+                                        "メンバーレコードデシリアライゼーションエラー: {e}"
+                                    ))
+                                })?;
+
+                            let member = record.to_family_member().map_err(AppError::Domain)?;
+
+                            members.push(member);
                         }
-                    },
-                    Err(e) => {
-                        error!("メンバーデシリアライゼーションエラー: {}", e);
-                        continue;
                     }
                 }
             }
-        }
 
-        debug!("メンバー一覧取得完了: {} 件", members.len());
-        Ok(members)
+            debug!("家族メンバー取得完了: {} 人", members.len());
+            Ok(members)
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(members) => Ok(members),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
+        }
     }
 
-    /// ユーザーIDでメンバーを取得する
-    pub async fn get_member_by_user_id(
+    /// 特定のメンバーを取得
+    pub async fn get_family_member(
         &self,
-        family_id: &str,
-        user_id: &str,
-    ) -> Result<Option<FamilyMember>, DomainError> {
+        family_id: &FamilyId,
+        user_id: &UserId,
+    ) -> Result<Option<FamilyMember>, AppError> {
         info!(
-            "メンバーを取得中: family_id={}, user_id={}",
+            "家族メンバー取得中: family_id={}, user_id={}",
             family_id, user_id
         );
 
-        let pk = format!("FAMILY#{family_id}");
-        let sk = format!("MEMBER#{user_id}");
+        let pk = format!("FAMILY#{}", family_id.as_str());
+        let sk = format!("MEMBER#{}", user_id.as_str());
 
-        let result = retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .get_item()
-                    .table_name(self.db.table_name())
-                    .key("PK", AttributeValue::S(pk.clone()))
-                    .key("SK", AttributeValue::S(sk.clone()))
-                    .send()
-                    .await
-                    .map_err(|e| self.db.convert_error(e))
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("メンバー取得エラー: {e}")))?;
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            let response = self
+                .db
+                .client()
+                .get_item()
+                .table_name(self.db.table_name())
+                .key("PK", AttributeValue::S(pk.clone()))
+                .key("SK", AttributeValue::S(sk.clone()))
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
 
-        if let Some(item) = result.item {
-            if let Some(data) = item.get("Data").and_then(|v| v.as_s().ok()) {
-                let record: MemberRecord = serde_json::from_str(data)
-                    .map_err(|e| DomainError::EventDeserialization(e.to_string()))?;
-                let member = FamilyMember::try_from(record)?;
-                debug!("メンバー取得完了: user_id={}", user_id);
-                Ok(Some(member))
-            } else {
-                error!("メンバーデータが無効です: user_id={}", user_id);
-                Err(DomainError::InvalidEvent("Invalid member data".to_string()))
+            if let Some(item) = response.item {
+                if let Some(data_attr) = item.get("Data") {
+                    if let Ok(data_str) = data_attr.as_s() {
+                        let record: FamilyMemberRecord =
+                            serde_json::from_str(data_str).map_err(|e| {
+                                AppError::Deserialization(format!(
+                                    "メンバーレコードデシリアライゼーションエラー: {e}"
+                                ))
+                            })?;
+
+                        let member = record.to_family_member().map_err(AppError::Domain)?;
+
+                        debug!("家族メンバー取得完了: user_id={}", user_id);
+                        return Ok(Some(member));
+                    }
+                }
             }
-        } else {
-            debug!("メンバーが見つかりません: user_id={}", user_id);
+
+            debug!("家族メンバーが見つかりません: user_id={}", user_id);
             Ok(None)
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(member) => Ok(member),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
         }
     }
 
-    /// メンバーを削除する
-    pub async fn delete_member(&self, family_id: &str, user_id: &str) -> Result<(), DomainError> {
+    /// メンバーを家族から削除
+    pub async fn remove_family_member(
+        &self,
+        family_id: &FamilyId,
+        user_id: &UserId,
+    ) -> Result<(), AppError> {
         info!(
-            "メンバーを削除中: family_id={}, user_id={}",
+            "家族メンバー削除中: family_id={}, user_id={}",
             family_id, user_id
         );
 
-        let pk = format!("FAMILY#{family_id}");
-        let sk = format!("MEMBER#{user_id}");
+        let pk = format!("FAMILY#{}", family_id.as_str());
+        let sk = format!("MEMBER#{}", user_id.as_str());
 
-        retry_dynamodb_operation(
-            || async {
-                self.db
-                    .client()
-                    .delete_item()
-                    .table_name(self.db.table_name())
-                    .key("PK", AttributeValue::S(pk.clone()))
-                    .key("SK", AttributeValue::S(sk.clone()))
-                    .send()
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            self.db
+                .client()
+                .delete_item()
+                .table_name(self.db.table_name())
+                .key("PK", AttributeValue::S(pk.clone()))
+                .key("SK", AttributeValue::S(sk.clone()))
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
+
+            debug!("家族メンバー削除完了: user_id={}", user_id);
+            Ok(())
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(()) => Ok(()),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
+        }
+    }
+
+    /// メンバーの最終アクティブ時刻を更新
+    pub async fn update_member_last_active(
+        &self,
+        family_id: &FamilyId,
+        user_id: &UserId,
+        last_active_at: DateTime<Utc>,
+    ) -> Result<(), AppError> {
+        info!(
+            "メンバー最終アクティブ時刻更新中: family_id={}, user_id={}",
+            family_id, user_id
+        );
+
+        let pk = format!("FAMILY#{}", family_id.as_str());
+        let sk = format!("MEMBER#{}", user_id.as_str());
+
+        let result = DynamoDbRetryExecutor::execute(|| async {
+            self.db
+                .client()
+                .update_item()
+                .table_name(self.db.table_name())
+                .key("PK", AttributeValue::S(pk.clone()))
+                .key("SK", AttributeValue::S(sk.clone()))
+                .update_expression("SET #last_active = :last_active, #updated_at = :updated_at")
+                .expression_attribute_names("#last_active", "last_active_at")
+                .expression_attribute_names("#updated_at", "UpdatedAt")
+                .expression_attribute_values(
+                    ":last_active",
+                    AttributeValue::S(last_active_at.to_rfc3339()),
+                )
+                .expression_attribute_values(
+                    ":updated_at",
+                    AttributeValue::S(Utc::now().to_rfc3339()),
+                )
+                .send()
+                .await
+                .map_err(|e| self.db.convert_error(e))?;
+
+            debug!("メンバー最終アクティブ時刻更新完了: user_id={}", user_id);
+            Ok(())
+        })
+        .await;
+
+        match result {
+            RetryResult::Success(()) => Ok(()),
+            RetryResult::MaxAttemptsReached(error) => Err(error),
+            RetryResult::NonRetryable(error) => Err(error),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+    use domain::{FamilyRole, InvitationToken, UserId};
+    use shared::Config;
+
+    async fn setup_test_repository() -> Result<FamilyRepository, AppError> {
+        let config = Config {
+            dynamodb_table: "test-table".to_string(),
+            environment: "test".to_string(),
+            aws_region: "ap-northeast-1".to_string(),
+            dynamodb_endpoint: Some("http://localhost:8000".to_string()),
+            retry_max_attempts: 2,
+            retry_initial_delay_ms: 10,
+        };
+        let db_client = DynamoDbClient::new_for_test(&config).await?;
+        Ok(FamilyRepository::new(db_client))
+    }
+
+    #[tokio::test]
+    async fn test_invitation_lifecycle() {
+        let repo = match setup_test_repository().await {
+            Ok(repo) => repo,
+            Err(_) => {
+                println!("DynamoDB Localが利用できないため、テストをスキップします");
+                return;
+            }
+        };
+
+        let invitation = FamilyInvitation {
+            invitation_token: InvitationToken::new(),
+            family_id: FamilyId::new(),
+            email: "test@example.com".to_string(),
+            role: FamilyRole::Member,
+            invited_by: UserId::new(),
+            expires_at: Utc::now() + Duration::days(7),
+            created_at: Utc::now(),
+            is_used: false,
+        };
+
+        // 実際のDynamoDB Localが動いていない場合はスキップ
+        if repo.save_invitation(&invitation).await.is_ok() {
+            // 招待を取得
+            let retrieved = repo
+                .get_invitation(&invitation.invitation_token)
+                .await
+                .unwrap();
+            assert!(retrieved.is_some());
+            let retrieved_invitation = retrieved.unwrap();
+            assert_eq!(retrieved_invitation.email, invitation.email);
+            assert!(!retrieved_invitation.is_used);
+
+            // 招待を使用済みにマーク
+            if repo
+                .mark_invitation_used(&invitation.invitation_token)
+                .await
+                .is_ok()
+            {
+                let updated = repo
+                    .get_invitation(&invitation.invitation_token)
                     .await
-                    .map_err(|e| self.db.convert_error(e))?;
+                    .unwrap();
+                if let Some(updated_invitation) = updated {
+                    assert!(updated_invitation.is_used);
+                }
+            }
+        }
+    }
 
-                debug!("メンバー削除完了: user_id={}", user_id);
-                Ok(())
-            },
-            None,
-        )
-        .await
-        .map_err(|e| DomainError::Validation(format!("メンバー削除エラー: {e}")))
+    #[tokio::test]
+    async fn test_family_member_management() {
+        let repo = match setup_test_repository().await {
+            Ok(repo) => repo,
+            Err(_) => {
+                println!("DynamoDB Localが利用できないため、テストをスキップします");
+                return;
+            }
+        };
+        let family_id = FamilyId::new();
+        let user_id = UserId::new();
+
+        let member = FamilyMember {
+            user_id: user_id.clone(),
+            display_name: "テストユーザー".to_string(),
+            email: "test@example.com".to_string(),
+            role: FamilyRole::Member,
+            joined_at: Utc::now(),
+            is_active: true,
+        };
+
+        // 実際のDynamoDB Localが動いていない場合はスキップ
+        if repo.add_family_member(&family_id, &member).await.is_ok() {
+            // メンバーを取得
+            let retrieved = repo.get_family_member(&family_id, &user_id).await.unwrap();
+            assert!(retrieved.is_some());
+            let retrieved_member = retrieved.unwrap();
+            assert_eq!(retrieved_member.display_name, member.display_name);
+
+            // 家族のすべてのメンバーを取得
+            let all_members = repo.get_family_members(&family_id).await.unwrap();
+            assert_eq!(all_members.len(), 1);
+            assert_eq!(all_members[0].user_id, user_id);
+        }
+    }
+
+    #[test]
+    fn test_invitation_record_conversion() {
+        let invitation = FamilyInvitation {
+            invitation_token: InvitationToken::new(),
+            family_id: FamilyId::new(),
+            email: "test@example.com".to_string(),
+            role: FamilyRole::Admin,
+            invited_by: UserId::new(),
+            expires_at: Utc::now() + Duration::days(7),
+            created_at: Utc::now(),
+            is_used: false,
+        };
+
+        let record = InvitationRecord::new(&invitation);
+        let converted = record.to_family_invitation().unwrap();
+
+        assert_eq!(converted.email, invitation.email);
+        assert_eq!(converted.role, invitation.role);
+        assert_eq!(converted.is_used, invitation.is_used);
+    }
+
+    #[test]
+    fn test_family_member_record_conversion() {
+        let family_id = FamilyId::new();
+        let member = FamilyMember {
+            user_id: UserId::new(),
+            display_name: "テストユーザー".to_string(),
+            email: "test@example.com".to_string(),
+            role: FamilyRole::Member,
+            joined_at: Utc::now(),
+            is_active: true,
+        };
+
+        let record = FamilyMemberRecord::new(&member, &family_id);
+        let converted = record.to_family_member().unwrap();
+
+        assert_eq!(converted.user_id, member.user_id);
+        assert_eq!(converted.display_name, member.display_name);
+        assert_eq!(converted.role, member.role);
     }
 }

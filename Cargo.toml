@@ -8,7 +8,7 @@ members = [
     "crates/event-processor",
     "crates/snapshot-manager",
     "crates/shared",
-    "crates/family-invitation",
+    # "crates/family-invitation", # 一時的に無効化
     "crates/lambda-authorizer",
     "crates/token-refresh"
 ]

@@ -19,3 +19,7 @@ jsonwebtoken = "9.0"
 reqwest = { version = "0.11", features = ["json"] }
 aws-config = "1.0"
 aws-sdk-cognitoidentityprovider = "1.0"
+domain = { path = "../domain" }
+lambda_runtime = "0.8"
+tokio = { workspace = true }
+rand = "0.8"

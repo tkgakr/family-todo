@@ -9,9 +9,7 @@ use domain::{
     FamilyEvent, FamilyId, FamilyInvitation, FamilyMember, FamilyRole, InvitationToken, UserId,
 };
 use http::HeaderMap;
-use infrastructure::{
-    DynamoDbClient, FamilyEventRepository, FamilyInvitationRepository, FamilyMemberRepository,
-};
+use infrastructure::{DynamoDbClient, FamilyRepository};
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
 use shared::{
@@ -56,9 +54,7 @@ struct AcceptInvitationResponse {
 
 /// アプリケーション状態
 struct AppState {
-    invitation_repo: FamilyInvitationRepository,
-    member_repo: FamilyMemberRepository,
-    event_repo: FamilyEventRepository,
+    family_repo: FamilyRepository,
     cognito_client: CognitoClient,
     ses_client: SesClient,
     jwt_validator: JwtValidator,
@@ -77,9 +73,7 @@ impl AppState {
             .map_err(|e| anyhow::anyhow!("DynamoDB client initialization error: {}", e))?;
 
         // リポジトリを初期化
-        let invitation_repo = FamilyInvitationRepository::new(dynamodb_client.clone());
-        let member_repo = FamilyMemberRepository::new(dynamodb_client.clone());
-        let event_repo = FamilyEventRepository::new(dynamodb_client);
+        let family_repo = FamilyRepository::new(dynamodb_client);
 
         // JWT バリデーターを初期化
         let user_pool_id = std::env::var("COGNITO_USER_POOL_ID")
@@ -93,9 +87,7 @@ impl AppState {
             .map_err(|e| anyhow::anyhow!("JWT validator initialization error: {}", e))?;
 
         Ok(Self {
-            invitation_repo,
-            member_repo,
-            event_repo,
+            family_repo,
             cognito_client: CognitoClient::new(&aws_config),
             ses_client: SesClient::new(&aws_config),
             jwt_validator,

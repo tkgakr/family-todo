@@ -1,12 +1,11 @@
-use anyhow::Result;
 use domain::{TodoEvent, TodoId};
 use infrastructure::{DynamoDbClient, EventRepository};
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use shared::{init_tracing, Config};
+use shared::{handle_lambda_error, init_tracing, AppError, Config};
 use std::collections::HashMap;
-use tracing::{error, info};
+use tracing::info;
 
 /// API Gateway プロキシリクエスト構造体
 #[derive(Debug, Deserialize)]
@@ -104,37 +103,28 @@ async fn function_handler(
     );
 
     // 設定を読み込み
-    let config = Config::from_env().map_err(|e| {
-        error!("設定読み込みエラー: {}", e);
-        Error::from(format!("設定エラー: {e}"))
-    })?;
+    let config = handle_lambda_error!(
+        Config::from_env().map_err(|e| AppError::Configuration(format!("設定読み込みエラー: {e}"))),
+        event
+    );
 
     // DynamoDBクライアントを初期化
-    let db_client = DynamoDbClient::new(&config).await.map_err(|e| {
-        error!("DynamoDBクライアント初期化エラー: {}", e);
-        Error::from(format!("DynamoDBエラー: {e}"))
-    })?;
+    let db_client = handle_lambda_error!(DynamoDbClient::new(&config).await, event);
 
     let event_repo = EventRepository::new(db_client);
 
     // リクエストを処理
-    match handle_request(&event.payload, &event_repo).await {
-        Ok(response) => {
-            info!("CommandHandler完了: status={}", response.status_code);
-            Ok(response)
-        }
-        Err(e) => {
-            error!("CommandHandlerエラー: {}", e);
-            Ok(create_error_response(500, "内部サーバーエラー"))
-        }
-    }
+    let response = handle_lambda_error!(handle_request(&event.payload, &event_repo).await, event);
+
+    info!("CommandHandler完了: status={}", response.status_code);
+    Ok(response)
 }
 
 /// リクエストを処理する
 async fn handle_request(
     request: &ApiGatewayProxyRequest,
     event_repo: &EventRepository,
-) -> Result<ApiGatewayProxyResponse> {
+) -> Result<ApiGatewayProxyResponse, AppError> {
     // Lambda Authorizer からユーザー情報を抽出
     let (user_id, family_id) = extract_user_info_from_authorizer(request)?;
 
@@ -151,7 +141,7 @@ async fn handle_request(
 }
 
 /// リクエストからコマンドをパース
-fn parse_command(request: &ApiGatewayProxyRequest) -> Result<Command> {
+fn parse_command(request: &ApiGatewayProxyRequest) -> Result<Command, AppError> {
     let method = &request.http_method;
     let path = &request.path;
 
@@ -161,10 +151,11 @@ fn parse_command(request: &ApiGatewayProxyRequest) -> Result<Command> {
             let body = request
                 .body
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("リクエストボディが必要です"))?;
+                .ok_or_else(|| AppError::Validation("リクエストボディが必要です".to_string()))?;
 
-            let create_req: CreateTodoRequest = serde_json::from_str(body)
-                .map_err(|e| anyhow::anyhow!("リクエストボディのパースエラー: {}", e))?;
+            let create_req: CreateTodoRequest = serde_json::from_str(body).map_err(|e| {
+                AppError::Deserialization(format!("リクエストボディのパースエラー: {e}"))
+            })?;
 
             Ok(Command::CreateTodo {
                 title: create_req.title,
@@ -178,10 +169,11 @@ fn parse_command(request: &ApiGatewayProxyRequest) -> Result<Command> {
             let body = request
                 .body
                 .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("リクエストボディが必要です"))?;
+                .ok_or_else(|| AppError::Validation("リクエストボディが必要です".to_string()))?;
 
-            let update_req: UpdateTodoRequest = serde_json::from_str(body)
-                .map_err(|e| anyhow::anyhow!("リクエストボディのパースエラー: {}", e))?;
+            let update_req: UpdateTodoRequest = serde_json::from_str(body).map_err(|e| {
+                AppError::Deserialization(format!("リクエストボディのパースエラー: {e}"))
+            })?;
 
             Ok(Command::UpdateTodo {
                 todo_id,
@@ -199,8 +191,12 @@ fn parse_command(request: &ApiGatewayProxyRequest) -> Result<Command> {
             let todo_id = extract_todo_id_from_path(path)?;
             let reason = if let Some(body) = &request.body {
                 if !body.trim().is_empty() {
-                    let delete_req: DeleteTodoRequest = serde_json::from_str(body)
-                        .map_err(|e| anyhow::anyhow!("リクエストボディのパースエラー: {}", e))?;
+                    let delete_req: DeleteTodoRequest =
+                        serde_json::from_str(body).map_err(|e| {
+                            AppError::Deserialization(format!(
+                                "リクエストボディのパースエラー: {e}"
+                            ))
+                        })?;
                     delete_req.reason
                 } else {
                     None
@@ -211,59 +207,60 @@ fn parse_command(request: &ApiGatewayProxyRequest) -> Result<Command> {
 
             Ok(Command::DeleteTodo { todo_id, reason })
         }
-        _ => Err(anyhow::anyhow!(
-            "サポートされていないメソッドまたはパス: {} {}",
-            method,
-            path
-        )),
+        _ => Err(AppError::Validation(format!(
+            "サポートされていないメソッドまたはパス: {method} {path}"
+        ))),
     }
 }
 
 /// パスからTodoIdを抽出
-fn extract_todo_id_from_path(path: &str) -> Result<TodoId> {
+fn extract_todo_id_from_path(path: &str) -> Result<TodoId, AppError> {
     let parts: Vec<&str> = path.split('/').collect();
     if parts.len() >= 4 && parts[1] == "commands" && parts[2] == "todos" {
         let todo_id_str = parts[3];
         TodoId::from_string(todo_id_str.to_string())
-            .map_err(|e| anyhow::anyhow!("無効なTodoId: {}", e))
+            .map_err(|e| AppError::Validation(format!("無効なTodoId: {e}")))
     } else {
-        Err(anyhow::anyhow!("パスからTodoIdを抽出できません: {}", path))
+        Err(AppError::Validation(format!(
+            "パスからTodoIdを抽出できません: {path}"
+        )))
     }
 }
 
 /// 完了パスからTodoIdを抽出
-fn extract_todo_id_from_complete_path(path: &str) -> Result<TodoId> {
+fn extract_todo_id_from_complete_path(path: &str) -> Result<TodoId, AppError> {
     let parts: Vec<&str> = path.split('/').collect();
     if parts.len() >= 5 && parts[1] == "commands" && parts[2] == "todos" && parts[4] == "complete" {
         let todo_id_str = parts[3];
         TodoId::from_string(todo_id_str.to_string())
-            .map_err(|e| anyhow::anyhow!("無効なTodoId: {}", e))
+            .map_err(|e| AppError::Validation(format!("無効なTodoId: {e}")))
     } else {
-        Err(anyhow::anyhow!(
-            "完了パスからTodoIdを抽出できません: {}",
-            path
-        ))
+        Err(AppError::Validation(format!(
+            "完了パスからTodoIdを抽出できません: {path}"
+        )))
     }
 }
 
 /// Lambda Authorizer からユーザー情報を抽出
-fn extract_user_info_from_authorizer(request: &ApiGatewayProxyRequest) -> Result<(String, String)> {
+fn extract_user_info_from_authorizer(
+    request: &ApiGatewayProxyRequest,
+) -> Result<(String, String), AppError> {
     let authorizer = request
         .request_context
         .authorizer
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("認証情報が見つかりません"))?;
+        .ok_or_else(|| AppError::Authentication("認証情報が見つかりません".to_string()))?;
 
     let user_id = authorizer
         .user_id
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("ユーザーIDが見つかりません"))?
+        .ok_or_else(|| AppError::Authentication("ユーザーIDが見つかりません".to_string()))?
         .clone();
 
     let family_id = authorizer
         .family_id
         .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("家族IDが見つかりません"))?
+        .ok_or_else(|| AppError::Authentication("家族IDが見つかりません".to_string()))?
         .clone();
 
     Ok((user_id, family_id))
@@ -275,7 +272,7 @@ async fn execute_command(
     user_id: &str,
     family_id: &str,
     event_repo: &EventRepository,
-) -> Result<ApiGatewayProxyResponse> {
+) -> Result<ApiGatewayProxyResponse, AppError> {
     match command {
         Command::CreateTodo {
             title,
@@ -286,12 +283,11 @@ async fn execute_command(
 
             // バリデーション
             if title.trim().is_empty() {
-                return Ok(create_error_response(400, "タイトルは必須です"));
+                return Err(AppError::Validation("タイトルは必須です".to_string()));
             }
             if title.len() > 200 {
-                return Ok(create_error_response(
-                    400,
-                    "タイトルは200文字以内で入力してください",
+                return Err(AppError::Validation(
+                    "タイトルは200文字以内で入力してください".to_string(),
                 ));
             }
 
@@ -307,10 +303,7 @@ async fn execute_command(
             );
 
             // イベントを保存
-            event_repo.save_event(family_id, event).await.map_err(|e| {
-                error!("イベント保存エラー: {}", e);
-                anyhow::anyhow!("ToDo作成に失敗しました: {}", e)
-            })?;
+            event_repo.save_event(family_id, event).await?;
 
             info!("ToDo作成完了: todo_id={}", todo_id);
 
@@ -332,12 +325,11 @@ async fn execute_command(
             // タイトルのバリデーション
             if let Some(ref title) = title {
                 if title.trim().is_empty() {
-                    return Ok(create_error_response(400, "タイトルは必須です"));
+                    return Err(AppError::Validation("タイトルは必須です".to_string()));
                 }
                 if title.len() > 200 {
-                    return Ok(create_error_response(
-                        400,
-                        "タイトルは200文字以内で入力してください",
+                    return Err(AppError::Validation(
+                        "タイトルは200文字以内で入力してください".to_string(),
                     ));
                 }
             }
@@ -352,10 +344,7 @@ async fn execute_command(
             );
 
             // イベントを保存
-            event_repo.save_event(family_id, event).await.map_err(|e| {
-                error!("イベント保存エラー: {}", e);
-                anyhow::anyhow!("ToDo更新に失敗しました: {}", e)
-            })?;
+            event_repo.save_event(family_id, event).await?;
 
             info!("ToDo更新完了: todo_id={}", todo_id);
 
@@ -373,10 +362,7 @@ async fn execute_command(
             let event = TodoEvent::new_todo_completed(todo_id.clone(), user_id.to_string());
 
             // イベントを保存
-            event_repo.save_event(family_id, event).await.map_err(|e| {
-                error!("イベント保存エラー: {}", e);
-                anyhow::anyhow!("ToDo完了に失敗しました: {}", e)
-            })?;
+            event_repo.save_event(family_id, event).await?;
 
             info!("ToDo完了完了: todo_id={}", todo_id);
 
@@ -394,10 +380,7 @@ async fn execute_command(
             let event = TodoEvent::new_todo_deleted(todo_id.clone(), user_id.to_string(), reason);
 
             // イベントを保存
-            event_repo.save_event(family_id, event).await.map_err(|e| {
-                error!("イベント保存エラー: {}", e);
-                anyhow::anyhow!("ToDo削除に失敗しました: {}", e)
-            })?;
+            event_repo.save_event(family_id, event).await?;
 
             info!("ToDo削除完了: todo_id={}", todo_id);
 
@@ -429,28 +412,6 @@ fn create_success_response(status_code: u16, body: Value) -> ApiGatewayProxyResp
     }
 }
 
-/// エラーレスポンスを作成
-fn create_error_response(status_code: u16, message: &str) -> ApiGatewayProxyResponse {
-    let mut headers = HashMap::new();
-    headers.insert("Content-Type".to_string(), "application/json".to_string());
-    headers.insert("Access-Control-Allow-Origin".to_string(), "*".to_string());
-    headers.insert(
-        "Access-Control-Allow-Headers".to_string(),
-        "Content-Type,Authorization".to_string(),
-    );
-
-    let body = json!({
-        "error": message,
-        "status_code": status_code
-    });
-
-    ApiGatewayProxyResponse {
-        status_code,
-        headers,
-        body: body.to_string(),
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     init_tracing();
@@ -460,7 +421,7 @@ async fn main() -> Result<(), Error> {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
+    use shared::AppError;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     /// テスト用の Authorizer 構造体
@@ -504,7 +465,7 @@ mod tests {
     }
 
     /// テスト用のリクエストから認証情報を抽出
-    fn extract_user_claims(request: &TestApiGatewayRequest) -> Result<TestClaims> {
+    fn extract_user_claims(request: &TestApiGatewayRequest) -> Result<TestClaims, AppError> {
         match &request.request_context.authorizer {
             Some(auth) => {
                 let claims = TestClaims {
@@ -527,7 +488,9 @@ mod tests {
                 };
                 Ok(claims)
             }
-            None => Err(anyhow::anyhow!("認証情報が見つかりません")),
+            None => Err(AppError::Authentication(
+                "認証情報が見つかりません".to_string(),
+            )),
         }
     }
 

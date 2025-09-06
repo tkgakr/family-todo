@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum DomainError {
     #[error("Invalid TodoId: {0}")]
     InvalidTodoId(String),
@@ -67,7 +67,7 @@ pub enum DomainError {
     Unauthorized,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum TodoError {
     #[error("Validation error: {0}")]
     Validation(String),

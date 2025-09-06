@@ -1,7 +1,6 @@
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_dynamodb::Client;
-use domain::errors::TodoError;
-use shared::Config;
+use shared::{AppError, Config};
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -17,7 +16,7 @@ pub struct DynamoDbClient {
 impl DynamoDbClient {
     /// 新しい DynamoDB クライアントを作成
     /// AWS 設定を自動的に読み込み、適切なリージョンを設定
-    pub async fn new(config: &Config) -> Result<Self, TodoError> {
+    pub async fn new(config: &Config) -> Result<Self, AppError> {
         info!(
             "DynamoDB クライアントを初期化中... region: {}, table: {}",
             config.aws_region, config.dynamodb_table
@@ -55,7 +54,7 @@ impl DynamoDbClient {
                 );
                 // 開発環境では警告のみ、本番環境ではエラーとして扱う可能性
                 if config.environment == "prod" {
-                    return Err(TodoError::DynamoDb(format!("テーブル接続エラー: {e}")));
+                    return Err(AppError::DynamoDb(format!("テーブル接続エラー: {e}")));
                 }
             }
         }
@@ -69,7 +68,7 @@ impl DynamoDbClient {
 
     /// テスト用のモッククライアントを作成
     #[cfg(test)]
-    pub async fn new_for_test(config: &Config) -> Result<Self, TodoError> {
+    pub async fn new_for_test(config: &Config) -> Result<Self, AppError> {
         use aws_sdk_dynamodb::config::Builder;
 
         let aws_config = Builder::new()
@@ -107,23 +106,31 @@ impl DynamoDbClient {
         &self.region
     }
 
-    /// DynamoDB エラーを TodoError に変換（簡略版）
-    pub fn convert_error(&self, error: impl std::fmt::Display) -> TodoError {
+    /// DynamoDB エラーを AppError に変換
+    pub fn convert_error(&self, error: impl std::fmt::Display) -> AppError {
         let error_str = error.to_string();
 
         if error_str.contains("ConditionalCheckFailedException") {
-            TodoError::ConcurrentModification
+            AppError::ConcurrentModification
         } else if error_str.contains("ResourceNotFoundException") {
-            TodoError::NotFound("リソースが見つかりません".to_string())
+            AppError::NotFound("リソースが見つかりません".to_string())
         } else if error_str.contains("ValidationException") {
-            TodoError::Validation(error_str)
+            AppError::Validation(error_str)
         } else if error_str.contains("ThrottlingException") {
-            TodoError::DynamoDb("リクエストがスロットリングされました".to_string())
+            AppError::DynamoDb("リクエストがスロットリングされました".to_string())
+        } else if error_str.contains("ProvisionedThroughputExceededException") {
+            AppError::DynamoDb("プロビジョニングされたスループットを超過しました".to_string())
         } else if error_str.contains("ServiceUnavailableException") {
-            TodoError::DynamoDb("サービスが一時的に利用できません".to_string())
+            AppError::ServiceUnavailable("DynamoDBサービスが一時的に利用できません".to_string())
+        } else if error_str.contains("InternalServerError") {
+            AppError::Internal("DynamoDB内部サーバーエラー".to_string())
+        } else if error_str.contains("RequestLimitExceeded") {
+            AppError::RateLimitExceeded
+        } else if error_str.contains("ItemCollectionSizeLimitExceededException") {
+            AppError::DynamoDb("アイテムコレクションサイズ制限を超過しました".to_string())
         } else {
             error!("予期しない DynamoDB エラー: {}", error_str);
-            TodoError::DynamoDb(format!("DynamoDB エラー: {error_str}"))
+            AppError::DynamoDb(format!("DynamoDB エラー: {error_str}"))
         }
     }
 
@@ -146,7 +153,7 @@ pub struct DynamoDbConnectionPool {
 
 impl DynamoDbConnectionPool {
     /// 新しいコネクションプールを作成
-    pub async fn new(config: &Config) -> Result<Self, TodoError> {
+    pub async fn new(config: &Config) -> Result<Self, AppError> {
         let client = DynamoDbClient::new(config).await?;
 
         info!("DynamoDB コネクションプールを初期化完了");
@@ -160,7 +167,7 @@ impl DynamoDbConnectionPool {
     }
 
     /// ヘルスチェック - 接続状態を確認
-    pub async fn health_check(&self) -> Result<(), TodoError> {
+    pub async fn health_check(&self) -> Result<(), AppError> {
         match self
             .client
             .client()
