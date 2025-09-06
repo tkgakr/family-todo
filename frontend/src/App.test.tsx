@@ -10,6 +10,8 @@ describe('App', () => {
 
   it('renders the placeholder message', () => {
     render(<App />)
-    expect(screen.getByText('アプリケーションの基盤が構築されました。')).toBeInTheDocument()
+    expect(
+      screen.getByText('React + TypeScript + Vite プロジェクトが構築されました。')
+    ).toBeInTheDocument()
   })
 })

@@ -126,7 +126,7 @@
 
 - [ ] 7. フロントエンド基盤の実装
 
-  - [ ] 7.1 React + TypeScript + Vite プロジェクトを構築
+  - [x] 7.1 React + TypeScript + Vite プロジェクトを構築
 
     - Vite を使用した React プロジェクトを作成する
     - TypeScript 設定と型定義を実装する
