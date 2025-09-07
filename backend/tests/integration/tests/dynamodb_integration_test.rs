@@ -1,17 +1,16 @@
 use anyhow::Result;
 use chrono::Utc;
 use integration_tests::{
-    create_sample_family_id, create_sample_todo, create_sample_todo_id, DynamoDbRepository, DynamoDbTestClient,
+    create_sample_family_id, create_sample_todo, create_sample_todo_id, DynamoDbTestClient,
 };
 use shared::{
     domain::{
-        aggregates::{Todo, TodoSnapshot, TodoStatus, TodoUpdates},
+        aggregates::{TodoSnapshot, TodoStatus, TodoUpdates},
         error::UpdateError,
         events::TodoEvent,
         identifiers::{FamilyId, TodoId, UserId, EventId},
     },
 };
-use ulid::Ulid;
 
 #[tokio::test]
 async fn test_dynamodb_table_creation_and_initialization() -> Result<()> {
@@ -142,7 +141,7 @@ async fn test_active_todos_query() -> Result<()> {
     for i in 1..=3 {
         let mut todo = create_sample_todo();
         todo.id = TodoId::new();
-        todo.title = format!("アクティブTodo {}", i);
+        todo.title = format!("アクティブTodo {i}");
         todo.status = TodoStatus::Active;
 
         repository.save_todo_projection(&family_id, &todo).await?;
@@ -339,7 +338,7 @@ async fn test_multiple_families_isolation() -> Result<()> {
 
     let family_id_1 = FamilyId::new();
     let family_id_2 = FamilyId::new();
-    let todo_id = create_sample_todo_id();
+    let _todo_id = create_sample_todo_id();
 
     // 家族1のTodo作成・保存
     let mut todo_1 = create_sample_todo();

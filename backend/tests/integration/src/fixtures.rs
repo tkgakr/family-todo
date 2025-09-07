@@ -1,6 +1,6 @@
 use chrono::Utc;
 use shared::domain::{
-    aggregates::{Todo, TodoSnapshot},
+    aggregates::Todo,
     events::TodoEvent,
     identifiers::{EventId, FamilyId, TodoId, UserId},
 };

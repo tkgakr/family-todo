@@ -102,7 +102,7 @@ test: test-unit test-integration
 test-unit:
 	@echo "Running unit tests..."
 	cd backend && cargo test --lib --all-features
-	cd frontend && npm run test:unit
+	cd frontend && npm run test
 	@echo "Unit tests complete!"
 
 .PHONY: test-integration
