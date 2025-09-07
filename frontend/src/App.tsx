@@ -1,9 +1,9 @@
-import { Routes, Route } from 'react-router-dom'
-import { Authenticator } from '@aws-amplify/ui-react'
-import Layout from './components/Layout'
-import TodoList from './pages/TodoList'
-import TodoDetail from './pages/TodoDetail'
-import Settings from './pages/Settings'
+import { Authenticator } from "@aws-amplify/ui-react"
+import { Route, Routes } from "react-router-dom"
+import Layout from "./components/Layout"
+import Settings from "./pages/Settings"
+import TodoDetail from "./pages/TodoDetail"
+import TodoList from "./pages/TodoList"
 
 function App() {
   return (

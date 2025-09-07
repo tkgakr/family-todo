@@ -1,10 +1,10 @@
-import { User, Users, Bell, Shield } from 'lucide-react'
+import { Bell, Shield, User, Users } from "lucide-react"
 
 export default function Settings() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">設定</h1>
-      
+
       <div className="space-y-6">
         {/* Profile Section */}
         <div className="bg-white border border-gray-200 rounded-lg p-6">
@@ -12,7 +12,7 @@ export default function Settings() {
             <User className="h-5 w-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">プロフィール</h2>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-2">
@@ -38,9 +38,12 @@ export default function Settings() {
               />
             </div>
           </div>
-          
+
           <div className="mt-4">
-            <button type="button" className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
+            <button
+              type="button"
+              className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
+            >
               プロフィールを更新
             </button>
           </div>
@@ -52,11 +55,9 @@ export default function Settings() {
             <Users className="h-5 w-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">家族設定</h2>
           </div>
-          
-          <p className="text-gray-600 mb-4">
-            現在の家族グループのメンバーを管理します。
-          </p>
-          
+
+          <p className="text-gray-600 mb-4">現在の家族グループのメンバーを管理します。</p>
+
           <div className="space-y-3">
             <div className="flex items-center justify-between py-3 border-b border-gray-100">
               <div className="flex items-center space-x-3">
@@ -70,9 +71,12 @@ export default function Settings() {
               </div>
             </div>
           </div>
-          
+
           <div className="mt-4">
-            <button type="button" className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors">
+            <button
+              type="button"
+              className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
+            >
               メンバーを招待
             </button>
           </div>
@@ -84,7 +88,7 @@ export default function Settings() {
             <Bell className="h-5 w-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">通知設定</h2>
           </div>
-          
+
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -96,7 +100,7 @@ export default function Settings() {
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600" />
               </label>
             </div>
-            
+
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium text-gray-900">ToDoが完了されたとき</p>
@@ -116,7 +120,7 @@ export default function Settings() {
             <Shield className="h-5 w-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">セキュリティ</h2>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <button type="button" className="text-primary-600 hover:text-primary-700 font-medium">

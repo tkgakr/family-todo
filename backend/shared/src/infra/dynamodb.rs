@@ -327,6 +327,93 @@ impl DynamoDbRepository {
         Ok(None)
     }
 
+    pub async fn rebuild_todo_from_snapshot(
+        &self,
+        family_id: &FamilyId,
+        todo_id: &TodoId,
+    ) -> DomainResult<Todo> {
+        if let Some(snapshot) = self
+            .get_latest_snapshot(family_id, todo_id)
+            .await
+            .map_err(|e| DomainError::ValidationError(e.to_string()))?
+        {
+            let events_after_snapshot = self
+                .get_events_after_snapshot(family_id, todo_id, &snapshot.last_event_id)
+                .await
+                .map_err(|e| DomainError::ValidationError(e.to_string()))?;
+
+            let mut todo = snapshot.state;
+            for event in events_after_snapshot {
+                todo.apply(event);
+            }
+
+            Ok(todo)
+        } else {
+            let events = self
+                .get_events_for_todo(family_id, todo_id)
+                .await
+                .map_err(|e| DomainError::ValidationError(e.to_string()))?;
+
+            if events.is_empty() {
+                return Err(DomainError::TodoNotFound(todo_id.as_str().to_string()));
+            }
+
+            let mut todo = Todo::default();
+            for event in events {
+                todo.apply(event);
+            }
+
+            Ok(todo)
+        }
+    }
+
+    async fn get_events_after_snapshot(
+        &self,
+        family_id: &FamilyId,
+        todo_id: &TodoId,
+        last_event_id: &str,
+    ) -> Result<Vec<TodoEvent>> {
+        let pk = format!("FAMILY#{}", family_id.as_str());
+        let sk_prefix = format!("TODO#EVENT#{}#", todo_id.as_str());
+
+        let query_output = self
+            .client
+            .query()
+            .table_name(&self.table_name)
+            .key_condition_expression("PK = :pk AND begins_with(SK, :sk_prefix)")
+            .expression_attribute_values(":pk", AttributeValue::S(pk))
+            .expression_attribute_values(":sk_prefix", AttributeValue::S(sk_prefix))
+            .send()
+            .await?;
+
+        let mut events = Vec::new();
+        let mut found_last_event = false;
+
+        if let Some(items) = query_output.items {
+            for item in items {
+                if let Some(AttributeValue::S(event_data)) = item.get("Data") {
+                    match serde_json::from_str::<TodoEvent>(event_data) {
+                        Ok(event) => {
+                            if event.event_id().as_str() == last_event_id {
+                                found_last_event = true;
+                                continue;
+                            }
+                            if found_last_event {
+                                events.push(event);
+                            }
+                        }
+                        Err(e) => {
+                            error!(error = %e, "Failed to deserialize event");
+                        }
+                    }
+                }
+            }
+        }
+
+        events.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
+        Ok(events)
+    }
+
     fn build_update_expression(&self, updates: &TodoUpdates) -> String {
         let mut set_clauses = vec!["Version = Version + :inc".to_string()];
         set_clauses.push("UpdatedAt = :updated_at".to_string());

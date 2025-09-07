@@ -12,9 +12,9 @@ export interface Todo {
 }
 
 export enum TodoStatus {
-  Active = 'Active',
-  Completed = 'Completed',
-  Deleted = 'Deleted',
+  Active = "Active",
+  Completed = "Completed",
+  Deleted = "Deleted",
 }
 
 export interface CreateTodoRequest {

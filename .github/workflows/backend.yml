@@ -1,16 +1,18 @@
-name: Deploy Backend
+name: Backend CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "backend/**"
       - "infra/**"
+      - ".github/workflows/backend.yml"
   pull_request:
     branches: [main]
     paths:
       - "backend/**"
       - "infra/**"
+      - ".github/workflows/backend.yml"
 
 env:
   RUST_VERSION: "1.75"
@@ -83,10 +85,55 @@ jobs:
           path: backend/target/aarch64-unknown-linux-musl/release/bootstrap*
           retention-days: 1
 
-  deploy:
+  deploy-dev:
+    needs: [test, build]
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: lambda-binaries
+          path: backend/target/aarch64-unknown-linux-musl/release/
+      
+      - name: Make binaries executable
+        run: |
+          chmod +x backend/target/aarch64-unknown-linux-musl/release/bootstrap
+      
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to Development
+        run: |
+          cd infra
+          sam build --use-container --parallel --cached
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name family-todo-app-dev \
+            --s3-bucket ${{ secrets.SAM_ARTIFACTS_BUCKET }} \
+            --s3-prefix family-todo-app-dev \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides Environment=dev
+
+  deploy-prod:
     needs: [test, build]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       id-token: write
       contents: read
@@ -121,18 +168,18 @@ jobs:
             --parallel \
             --cached
       
-      - name: Deploy to AWS
+      - name: Deploy to Production
         run: |
           cd infra
+          sam build --use-container --parallel --cached
           sam deploy \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --stack-name family-todo-app-${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }} \
+            --stack-name family-todo-app-prod \
             --s3-bucket ${{ secrets.SAM_ARTIFACTS_BUCKET }} \
-            --s3-prefix family-todo-app \
+            --s3-prefix family-todo-app-prod \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides \
-              Environment=${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+            --parameter-overrides Environment=prod
       
       - name: Run smoke tests
         run: |

@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { X } from 'lucide-react'
-import type { CreateTodoRequest } from '../types/todo'
+import { X } from "lucide-react"
+import { useState } from "react"
+import type { CreateTodoRequest } from "../types/todo"
 
 interface TodoFormProps {
   onSubmit: (data: CreateTodoRequest) => void
@@ -9,19 +9,19 @@ interface TodoFormProps {
 }
 
 export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProps) {
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [tags, setTags] = useState('')
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [tags, setTags] = useState("")
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!title.trim()) return
 
     const tagsArray = tags
-      .split(',')
-      .map(tag => tag.trim())
-      .filter(tag => tag.length > 0)
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0)
 
     onSubmit({
       title: title.trim(),
@@ -35,15 +35,11 @@ export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProp
       <div className="bg-white rounded-lg max-w-md w-full mx-4">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-lg font-semibold text-gray-900">新しいToDo</h2>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600"
-          >
+          <button type="button" onClick={onCancel} className="text-gray-400 hover:text-gray-600">
             <X className="h-5 w-5" />
           </button>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="p-6">
           <div className="mb-4">
             <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
@@ -60,7 +56,7 @@ export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProp
               required
             />
           </div>
-          
+
           <div className="mb-4">
             <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
               説明
@@ -75,7 +71,7 @@ export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProp
               maxLength={1000}
             />
           </div>
-          
+
           <div className="mb-6">
             <label htmlFor="tags" className="block text-sm font-medium text-gray-700 mb-2">
               タグ
@@ -90,7 +86,7 @@ export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProp
             />
             <p className="text-xs text-gray-500 mt-1">カンマ区切りで複数のタグを入力できます</p>
           </div>
-          
+
           <div className="flex justify-end space-x-3">
             <button
               type="button"
@@ -105,7 +101,7 @@ export default function TodoForm({ onSubmit, onCancel, isLoading }: TodoFormProp
               disabled={!title.trim() || isLoading}
               className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? '作成中...' : '作成'}
+              {isLoading ? "作成中..." : "作成"}
             </button>
           </div>
         </form>

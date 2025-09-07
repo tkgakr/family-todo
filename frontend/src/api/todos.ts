@@ -1,11 +1,18 @@
-import { apiClient } from './client'
-import { type Todo, type CreateTodoRequest, type UpdateTodoRequest, type TodoListResponse, type TodoHistoryResponse, TodoStatus } from '../types/todo'
+import {
+  type CreateTodoRequest,
+  type Todo,
+  type TodoHistoryResponse,
+  type TodoListResponse,
+  TodoStatus,
+  type UpdateTodoRequest,
+} from "../types/todo"
+import { apiClient } from "./client"
 
 export const todosApi = {
   // Get all todos
   getTodos: async (status: TodoStatus = TodoStatus.Active): Promise<TodoListResponse> => {
-    const response = await apiClient.get('/todos', {
-      params: { status: status.toLowerCase() }
+    const response = await apiClient.get("/todos", {
+      params: { status: status.toLowerCase() },
     })
     return response.data
   },
@@ -18,7 +25,7 @@ export const todosApi = {
 
   // Create a new todo
   createTodo: async (data: CreateTodoRequest): Promise<Todo> => {
-    const response = await apiClient.post('/todos', data)
+    const response = await apiClient.post("/todos", data)
     return response.data
   },
 
@@ -37,7 +44,7 @@ export const todosApi = {
   // Delete a todo
   deleteTodo: async (id: string, reason?: string): Promise<void> => {
     await apiClient.delete(`/todos/${id}`, {
-      data: { reason }
+      data: { reason },
     })
   },
 
@@ -45,5 +52,5 @@ export const todosApi = {
   getTodoHistory: async (id: string): Promise<TodoHistoryResponse> => {
     const response = await apiClient.get(`/todos/${id}/history`)
     return response.data
-  }
+  },
 }

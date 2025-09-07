@@ -183,6 +183,43 @@ Resources:
               Filters:
                 - Pattern: '{"dynamodb": {"NewImage": {"EntityType": {"S": ["Event"]}}}}'
 
+  TodoSnapshotManager:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-TodoSnapshotManager'
+      CodeUri: ../backend/snapshot-manager/
+      Handler: bootstrap
+      ReservedConcurrencyLimit: 2
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt SnapshotManagerDLQ.Arn
+      EventInvokeConfig:
+        MaximumEventAge: 3600
+        MaximumRetryAttempts: 2
+      Policies:
+        - DynamoDBStreamReadPolicy:
+            TableName: !Ref MainTable
+            StreamName: !GetAtt MainTable.StreamArn
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MainTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt SnapshotManagerDLQ.QueueName
+        - CloudWatchPutMetricPolicy: {}
+        - XRayWritePolicy: {}
+      Events:
+        Stream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt MainTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            MaximumBatchingWindowInSeconds: 10
+            ParallelizationFactor: 1
+            BisectBatchOnFunctionError: true
+            ReportBatchItemFailures: true
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"dynamodb": {"NewImage": {"EntityType": {"S": ["Event"]}}}}'
+
   # API Gateway
   TodoApi:
     Type: AWS::Serverless::Api
@@ -259,6 +296,15 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub '${AWS::StackName}-DLQ'
+      MessageRetentionPeriod: 1209600 # 14 days
+      VisibilityTimeoutSeconds: 60
+      KmsMasterKeyId: alias/aws/sqs
+
+  # SQS Dead Letter Queue for Snapshot Manager
+  SnapshotManagerDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-SnapshotManager-DLQ'
       MessageRetentionPeriod: 1209600 # 14 days
       VisibilityTimeoutSeconds: 60
       KmsMasterKeyId: alias/aws/sqs

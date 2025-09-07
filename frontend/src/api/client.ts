@@ -1,12 +1,12 @@
-import axios from 'axios'
-import { getCurrentUser, fetchAuthSession } from 'aws-amplify/auth'
+import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth"
+import axios from "axios"
 
-const API_BASE_URL = import.meta.env.VITE_API_ENDPOINT || 'http://localhost:3001'
+const API_BASE_URL = import.meta.env.VITE_API_ENDPOINT || "http://localhost:3001"
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 })
 
@@ -16,28 +16,27 @@ apiClient.interceptors.request.use(
     try {
       const session = await fetchAuthSession()
       const user = await getCurrentUser()
-      
+
       if (session.tokens?.idToken) {
         config.headers.Authorization = `Bearer ${session.tokens.idToken.toString()}`
       }
-      
+
       if (user.userId) {
-        config.headers['X-User-Id'] = user.userId
+        config.headers["X-User-Id"] = user.userId
       }
-      
+
       // Add family ID from user attributes if available
-      const familyId = user.signInDetails?.loginId || 'default-family'
-      config.headers['X-Family-Id'] = familyId
-      
+      const familyId = user.signInDetails?.loginId || "default-family"
+      config.headers["X-Family-Id"] = familyId
     } catch (error) {
-      console.warn('Failed to add auth headers:', error)
+      console.warn("Failed to add auth headers:", error)
     }
-    
+
     return config
   },
   (error) => {
     return Promise.reject(error)
-  }
+  },
 )
 
 // Response interceptor for error handling
@@ -46,8 +45,8 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       // Handle unauthorized - redirect to login
-      window.location.href = '/login'
+      window.location.href = "/login"
     }
     return Promise.reject(error)
-  }
+  },
 )

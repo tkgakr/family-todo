@@ -1,3 +1,7 @@
+pub mod logger;
+pub mod metrics;
+pub mod tracer;
+
 use anyhow::Result;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;

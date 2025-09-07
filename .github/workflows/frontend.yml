@@ -1,14 +1,16 @@
-name: Deploy Frontend
+name: Frontend CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - "frontend/**"
+      - ".github/workflows/frontend.yml"
   pull_request:
     branches: [main]
     paths:
       - "frontend/**"
+      - ".github/workflows/frontend.yml"
 
 env:
   NODE_VERSION: "20"
@@ -64,10 +66,45 @@ jobs:
           path: frontend/dist/
           retention-days: 1
 
-  deploy:
+  deploy-dev:
+    needs: test
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+      
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to Development S3
+        run: |
+          aws s3 sync frontend/dist/ s3://${{ secrets.DEV_S3_BUCKET_NAME }}/ \
+            --delete --exact-timestamps
+      
+      - name: Invalidate Development CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.DEV_CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+
+  deploy-prod:
     needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       id-token: write
       contents: read
@@ -86,9 +123,9 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       
-      - name: Deploy to S3
+      - name: Deploy to Production S3
         run: |
-          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          aws s3 sync frontend/dist/ s3://${{ secrets.PROD_S3_BUCKET_NAME }}/ \
             --delete \
             --exact-timestamps \
             --cache-control "public, max-age=31536000, immutable" \
@@ -96,21 +133,21 @@ jobs:
             --exclude "service-worker.js"
           
           # Upload HTML files with no-cache
-          aws s3 sync frontend/dist/ s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          aws s3 sync frontend/dist/ s3://${{ secrets.PROD_S3_BUCKET_NAME }}/ \
             --delete \
             --exact-timestamps \
             --cache-control "no-cache" \
             --include "*.html" \
             --include "service-worker.js"
       
-      - name: Invalidate CloudFront
+      - name: Invalidate Production CloudFront
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id ${{ secrets.PROD_CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
 
   e2e-tests:
-    needs: [deploy]
+    needs: [deploy-prod]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     

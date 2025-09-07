@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import { Plus, Check, Clock, Trash2, Edit } from 'lucide-react'
-import { useTodos, useCreateTodo, useCompleteTodo, useDeleteTodo } from '../hooks/useTodos'
-import { TodoStatus, type CreateTodoRequest } from '../types/todo'
-import TodoForm from '../components/TodoForm'
+import { Check, Clock, Edit, Plus, Trash2 } from "lucide-react"
+import { useState } from "react"
+import TodoForm from "../components/TodoForm"
+import { useCompleteTodo, useCreateTodo, useDeleteTodo, useTodos } from "../hooks/useTodos"
+import { type CreateTodoRequest, TodoStatus } from "../types/todo"
 
 export default function TodoList() {
   const [showForm, setShowForm] = useState(false)
   const [activeTab, setActiveTab] = useState<TodoStatus>(TodoStatus.Active)
-  
+
   const { data: todosData, isLoading, error } = useTodos(activeTab)
   const createTodoMutation = useCreateTodo()
   const completeTodoMutation = useCompleteTodo()
@@ -18,7 +18,7 @@ export default function TodoList() {
       await createTodoMutation.mutateAsync(data)
       setShowForm(false)
     } catch (error) {
-      console.error('Failed to create todo:', error)
+      console.error("Failed to create todo:", error)
     }
   }
 
@@ -26,16 +26,16 @@ export default function TodoList() {
     try {
       await completeTodoMutation.mutateAsync(id)
     } catch (error) {
-      console.error('Failed to complete todo:', error)
+      console.error("Failed to complete todo:", error)
     }
   }
 
   const handleDeleteTodo = async (id: string) => {
-    if (window.confirm('このToDoを削除しますか？')) {
+    if (window.confirm("このToDoを削除しますか？")) {
       try {
         await deleteTodoMutation.mutateAsync({ id })
       } catch (error) {
-        console.error('Failed to delete todo:', error)
+        console.error("Failed to delete todo:", error)
       }
     }
   }
@@ -75,8 +75,8 @@ export default function TodoList() {
       {/* Tabs */}
       <div className="flex space-x-1 mb-6">
         {[
-          { status: TodoStatus.Active, label: 'アクティブ', icon: Clock },
-          { status: TodoStatus.Completed, label: '完了済み', icon: Check },
+          { status: TodoStatus.Active, label: "アクティブ", icon: Clock },
+          { status: TodoStatus.Completed, label: "完了済み", icon: Check },
         ].map(({ status, label, icon: Icon }) => (
           <button
             type="button"
@@ -84,8 +84,8 @@ export default function TodoList() {
             onClick={() => setActiveTab(status)}
             className={`flex items-center space-x-2 px-4 py-2 rounded-md font-medium transition-colors ${
               activeTab === status
-                ? 'bg-primary-100 text-primary-700 border border-primary-200'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                ? "bg-primary-100 text-primary-700 border border-primary-200"
+                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
             }`}
           >
             <Icon className="h-4 w-4" />
@@ -99,7 +99,9 @@ export default function TodoList() {
         {todos.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
             <p className="text-gray-500">
-              {activeTab === TodoStatus.Active ? 'アクティブなToDoはありません' : '完了したToDoはありません'}
+              {activeTab === TodoStatus.Active
+                ? "アクティブなToDoはありません"
+                : "完了したToDoはありません"}
             </p>
           </div>
         ) : (
@@ -110,7 +112,9 @@ export default function TodoList() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <h3 className={`font-medium ${todo.status === TodoStatus.Completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                  <h3
+                    className={`font-medium ${todo.status === TodoStatus.Completed ? "line-through text-gray-500" : "text-gray-900"}`}
+                  >
                     {todo.title}
                   </h3>
                   {todo.description && (
@@ -129,15 +133,15 @@ export default function TodoList() {
                     </div>
                   )}
                   <p className="text-xs text-gray-500 mt-2">
-                    作成日: {new Date(todo.created_at).toLocaleDateString('ja-JP')}
+                    作成日: {new Date(todo.created_at).toLocaleDateString("ja-JP")}
                     {todo.completed_at && (
                       <span className="ml-4">
-                        完了日: {new Date(todo.completed_at).toLocaleDateString('ja-JP')}
+                        完了日: {new Date(todo.completed_at).toLocaleDateString("ja-JP")}
                       </span>
                     )}
                   </p>
                 </div>
-                
+
                 <div className="flex items-center space-x-2 ml-4">
                   {todo.status === TodoStatus.Active && (
                     <>

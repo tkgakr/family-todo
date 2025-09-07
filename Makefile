@@ -49,11 +49,11 @@ lint:
 
 .PHONY: build
 build:
-	sam build --use-container --parallel
+	cd infra && sam build --use-container --parallel
 
 .PHONY: deploy-local
 deploy-local: build
-	sam local start-api \
+	cd infra && sam local start-api \
 		--warm-containers EAGER \
 		--port 3001 \
-		--env-vars env.json
+		--env-vars ../env.json
