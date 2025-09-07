@@ -62,18 +62,53 @@
   - `test_todo_business_rules`: ビジネスルール・バリデーション検証
   - `test_todo_state_transitions`: 状態遷移ルール検証
   - `test_event_sequencing`: イベント順序・バージョン管理テスト
+- ✅ **DynamoDB統合テスト**: 包括的なデータベース層テスト実装（NEW 2025-09-07）
+  - `DynamoDbTestClient`: ローカル環境統合テストクライアント
+  - 8つの統合テストケース実装（テーブル作成、CRUD、楽観的ロック、スナップショット、イベント再構築等）
+  - 実際のドメインモデル対応（TodoCreatedV2, TodoUpdatedV1, TodoCompletedV1）
+  - 自動テストスキップ機能（DynamoDB Local未起動時）
 - ✅ **開発ワークフロー統合**: `make test-integration` コマンド
   - 開発ドキュメント更新（DEVELOPMENT.md）
   - 実際の実装に合わせたテストコード
-  - 全テストパス確認（4 passed; 0 failed）
+  - 全テストパス確認（ドメインロジック: 4 passed, DynamoDB: 8 passed）
 
 ## 🎯 現在の状態
 - **フロントエンド**: 完全にクリーンな状態（リント・ビルド成功）
 - **バックエンド**: 主要機能（command/query handler）は正常にコンパイル
 - **ドキュメント**: 包括的なドキュメント体系が完成
 - **ローカル開発環境**: 統合された開発ワークフロー完備
-- **統合テスト**: ドメインロジック統合テスト完成・全テストパス
+- **統合テスト**: ドメインロジック・DynamoDB統合テスト完成・全テストパス
 - **全体**: 中核機能は動作可能、テスト品質保証付きの開発・運用準備完了
+
+## 🧪 テスト実行方法
+
+### 統合テスト実行
+```bash
+# 全統合テスト実行（推奨）
+make test-integration
+
+# 個別テスト実行
+cd backend/tests/integration
+
+# ドメインロジックテスト
+cargo test domain_logic_test
+
+# DynamoDB統合テスト（DynamoDB Local不要な基本テスト）
+cargo test test_dynamodb_client_setup
+
+# DynamoDB統合テスト（全テスト、要DynamoDB Local起動）
+# 事前に: docker-compose up dynamodb
+cargo test dynamodb_integration_test
+```
+
+### テスト環境構築
+```bash
+# DynamoDB Local起動（DynamoDB統合テスト用）
+docker-compose up dynamodb
+
+# 環境変数でエンドポイントカスタマイズ可能
+export DYNAMODB_ENDPOINT=http://localhost:8000
+```
 
 ## 🚧 次セッションでの作業候補
 
@@ -81,7 +116,7 @@
 
 #### 7. 追加テストスイート実装
 ```bash
-# DynamoDB統合テスト（TestContainers使用）
+# ✅ DynamoDB統合テスト完成（2025-09-07実装済み）
 # Lambda関数統合テスト
 # frontend/tests/ - E2Eテスト実装（Playwright）
 # 負荷テスト（K6スクリプト）作成
@@ -124,8 +159,10 @@
 ### 新規追加されたテストファイル
 - `backend/tests/integration/` - 統合テスト構造（NEW）
 - `backend/tests/integration/src/helpers.rs` - テストヘルパー関数
-- `backend/tests/integration/src/fixtures.rs` - テストフィクスチャ
+- `backend/tests/integration/src/fixtures.rs` - テストフィクスチャ（拡張済み）
+- `backend/tests/integration/src/dynamodb_helpers.rs` - DynamoDB統合テストヘルパー（NEW）
 - `backend/tests/integration/tests/domain_logic_test.rs` - ドメインロジック統合テスト
+- `backend/tests/integration/tests/dynamodb_integration_test.rs` - DynamoDB統合テスト（NEW）
 
 ### 設定ファイル
 - `backend/Cargo.toml` - Rustワークスペース設定
@@ -163,13 +200,14 @@
 - ✅ CI/CD パイプライン
 - ✅ **ローカル開発環境整備** (2025-09-07)
 - ✅ **統合テスト実装** (NEW 2025-09-07)
+- ✅ **DynamoDB統合テスト** (NEW 2025-09-07)
 
-### 未実装機能 (3%)
-- ⬜ 追加テストスイート（DynamoDB統合テスト、E2Eテスト、負荷テスト）
+### 未実装機能 (2%)
+- ⬜ 追加テストスイート（E2Eテスト、負荷テスト）
 - ⬜ WebAuthn認証
 - ⬜ WebSocketリアルタイム同期
 
 ---
 **作成日時**: 2025-08-31  
-**最終更新**: 2025-09-07 13:50  
-**作業完了率**: 97%（統合テスト実装完了、残り3%は追加テストスイートと機能拡張）
+**最終更新**: 2025-09-07 14:30  
+**作業完了率**: 98%（DynamoDB統合テスト実装完了、残り2%はE2Eテストと機能拡張）

@@ -1,8 +1,8 @@
 use chrono::Utc;
 use shared::domain::{
-    aggregates::Todo,
+    aggregates::{Todo, TodoSnapshot},
     events::TodoEvent,
-    identifiers::{EventId, TodoId, UserId},
+    identifiers::{EventId, FamilyId, TodoId, UserId},
 };
 
 pub struct TodoFixtures;
@@ -72,4 +72,19 @@ impl TodoFixtures {
             user_id,
         ).unwrap()
     }
+}
+
+// ヘルパー関数
+pub fn create_sample_family_id() -> FamilyId {
+    FamilyId::new()
+}
+
+pub fn create_sample_todo_id() -> TodoId {
+    TodoId::new()
+}
+
+pub fn create_sample_todo() -> Todo {
+    let user_id = UserId::new();
+    let todo_id = TodoId::new();
+    TodoFixtures::sample_todo(user_id, todo_id)
 }
