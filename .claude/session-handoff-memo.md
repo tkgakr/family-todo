@@ -51,6 +51,12 @@
   - `env.json`拡張（OpenTelemetry、CORS、JWT等）
   - `.env.example`テンプレート作成
   - フロントエンド・バックエンド統合設定
+- ✅ **手動動作確認環境構築**（NEW 2025-09-07 21:00）
+  - Lambda関数ビルド環境構築（Makefile、バイナリ名衝突回避）
+  - SAMローカル環境対応（テンプレート修正、x86_64対応準備）
+  - フロントエンド開発サーバー起動確認（http://localhost:3000）
+  - DynamoDB Local正常起動・テーブル作成確認
+  - .gitignore最適化（buildファイル除外）
 
 ### 6. テストスイート実装（2025-09-07完了）
 - ✅ **統合テスト基盤**: ドメインロジック統合テスト完成
@@ -73,14 +79,15 @@
   - 全テストパス確認（ドメインロジック: 4 passed, DynamoDB: 8 passed）
 
 ## 🎯 現在の状態
-- **フロントエンド**: 完全にクリーンな状態（リント・ビルド成功）
-- **バックエンド**: 主要機能（command/query handler）は正常にコンパイル
+- **フロントエンド**: 完全にクリーンな状態（リント・ビルド成功）、開発サーバー起動可能
+- **バックエンド**: 主要機能（command/query handler）は正常にコンパイル、ビルド環境整備完了
 - **ドキュメント**: 包括的なドキュメント体系が完成
-- **ローカル開発環境**: 統合された開発ワークフロー完備
-- **統合テスト**: ドメインロジック・DynamoDB統合テスト完成・全テストパス（80%完成度）
+- **ローカル開発環境**: 統合された開発ワークフロー完備、手動動作確認環境構築完了
+- **統合テスト**: ドメインロジック・DynamoDB統合テスト完成・全テストパス（85%完成度）
   - ✅ 完成: ドメインロジック、DynamoDB操作層（全13テスト成功）
   - ⏸️ 保留: Lambda関数ハンドラー統合テスト（複雑性のため実装保留、基盤は準備済み）
-- **全体**: 中核機能は動作可能、基盤層テスト完成、実行層テスト未実装
+- **手動動作確認**: フロントエンド・データベース層での確認可能、バックエンドAPIは課題あり（クロスコンパイル要）
+- **全体**: 中核機能は動作可能、基盤層テスト完成、実行層テスト未実装、E2E手動テスト環境85%完成
 
 ## 🧪 テスト実行方法
 
@@ -112,17 +119,89 @@ docker-compose up dynamodb
 export DYNAMODB_ENDPOINT=http://localhost:8000
 ```
 
+## 🖱️ 手動動作確認手順
+
+### ローカル開発環境起動（NEW 2025-09-07）
+```bash
+# 1. 基本サービス起動
+docker-compose up -d dynamodb-local redis
+
+# 2. データベース初期化
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+aws dynamodb create-table \
+  --endpoint-url http://localhost:8000 \
+  --region ap-northeast-1 \
+  --table-name MainTable \
+  --attribute-definitions \
+    AttributeName=PK,AttributeType=S \
+    AttributeName=SK,AttributeType=S \
+    AttributeName=GSI1PK,AttributeType=S \
+    AttributeName=GSI1SK,AttributeType=S \
+  --key-schema \
+    AttributeName=PK,KeyType=HASH \
+    AttributeName=SK,KeyType=RANGE \
+  --global-secondary-indexes \
+    'IndexName=GSI1,KeySchema=[{AttributeName=GSI1PK,KeyType=HASH},{AttributeName=GSI1SK,KeyType=RANGE}],Projection={ProjectionType=ALL}' \
+  --billing-mode PAY_PER_REQUEST
+
+# 3. フロントエンド起動
+cd frontend && npm run dev
+# → http://localhost:3000 で起動
+```
+
+### 動作確認方法
+```bash
+# データベース状態確認
+export AWS_ACCESS_KEY_ID=test && export AWS_SECRET_ACCESS_KEY=test
+aws dynamodb scan --table-name MainTable --endpoint-url http://localhost:8000
+
+# サービス状態確認
+# - DynamoDB Local: http://localhost:8000
+# - Redis: localhost:6379  
+# - フロントエンド: http://localhost:3000
+```
+
+### バックエンドAPI起動（課題あり）
+```bash
+# 現在の制約: macOS（AppleSilicon）環境でのクロスコンパイル課題
+# SAMローカルAPIはLinuxバイナリ要求のため動作不可
+
+# 代替手段:
+# 1. Docker内でLinuxバイナリビルド
+# 2. AWSへのデプロイ後のテスト
+# 3. フロントエンドのみでモックデータ確認
+```
+
 ## 🚧 次セッションでの作業候補
 
-### 優先度B: 開発基盤の充実（継続）
+### 優先度A: E2E動作確認完成（NEW）
 
-#### 7. 追加テストスイート実装
+#### 7. バックエンドAPI完全動作確認
+```bash
+# 🔍 クロスコンパイル環境構築（x86_64-unknown-linux-musl）
+# 🔍 SAMローカルAPI完全動作確認
+# 🔍 curl/Postmanでの手動APIテスト実装
+# 🔍 フロントエンド↔バックエンド統合動作確認
+```
+
+#### 8. 完全なE2E手動テスト環境
+```bash
+# 🔍 make dev-servers統合コマンド修正
+# 🔍 一括環境構築スクリプト完成
+# 🔍 動作確認チェックリスト作成
+# 🔍 簡易データシード機能追加
+```
+
+### 優先度B: 追加テストスイート実装
+
+#### 9. 自動テスト拡張
 ```bash
 # ✅ DynamoDB統合テスト完成（2025-09-07実装済み）
 # 🔍 Lambda関数統合テスト（不足確認済み、実装必要）
-# frontend/tests/ - E2Eテスト実装（Playwright）
-# 負荷テスト（K6スクリプト）作成
-# テストデータ生成・シードスクリプト
+# 🔍 frontend/tests/ - E2Eテスト実装（Playwright）
+# 🔍 負荷テスト（K6スクリプト）作成
+# 🔍 テストデータ生成・シードスクリプト
 ```
 
 ### 優先度C: 機能拡張
@@ -202,8 +281,10 @@ export DYNAMODB_ENDPOINT=http://localhost:8000
 - ✅ CI/CD パイプライン
 - ✅ **ローカル開発環境整備** (2025-09-07)
 - ✅ **統合テスト基盤実装** (NEW 2025-09-07) - ドメインロジック・DynamoDB層完成
+- ✅ **手動動作確認環境構築** (NEW 2025-09-07) - フロントエンド・DB起動、SAMビルド基盤
 
-### 未実装機能 (3%)
+### 未実装機能 (5%)
+- ⬜ バックエンドAPI完全動作確認（クロスコンパイル課題）
 - ⬜ Lambda関数統合テスト（Command/Query/Event/Snapshot Handler）※技術的複雑さのため保留
 - ⬜ 追加テストスイート（E2Eテスト、負荷テスト）
 - ⬜ WebAuthn認証
@@ -211,5 +292,5 @@ export DYNAMODB_ENDPOINT=http://localhost:8000
 
 ---
 **作成日時**: 2025-08-31  
-**最終更新**: 2025-09-07 16:30  
-**作業完了率**: 97%（統合テスト基盤完成、全13テストパス、Lambda関数統合テストは複雑性のため保留、残り3%は高度な機能拡張のみ）
+**最終更新**: 2025-09-07 21:30  
+**作業完了率**: 95%（手動動作確認環境85%完成、フロントエンド・DB動作確認可能、バックエンドAPIはクロスコンパイル課題、残り5%はE2E完成・高度機能拡張）
