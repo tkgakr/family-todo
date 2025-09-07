@@ -204,10 +204,10 @@ make typecheck         # 型チェック（Rust + TypeScript）
 #### Rust (バックエンド)
 ```bash
 cd backend
-cargo test                    # 単体テスト
-cargo test --test '*'         # 統合テスト
-cargo fmt                     # フォーマット
-cargo clippy -- -D warnings  # リンター
+cargo test --lib --all-features    # 単体テスト
+cargo test --package integration-tests  # 統合テスト（ドメインロジック）
+cargo fmt                          # フォーマット
+cargo clippy -- -D warnings       # リンター
 ```
 
 #### TypeScript (フロントエンド)
@@ -220,14 +220,29 @@ npm run lint           # リンター
 npm run typecheck      # 型チェック
 ```
 
-### テストスイート（準備中）
+### 統合テスト
 
-統合テスト・E2Eテスト・負荷テストの実装予定：
+バックエンドドメインロジックの統合テストが実装済み：
 
 ```bash
-cd tests/load
-k6 run k6-script.js
+# 統合テスト実行
+make test-integration
+
+# または個別実行
+cd backend && cargo test --package integration-tests
+
+# 実装されたテスト:
+# - todo_creation_and_modification: Todo作成・更新・完了
+# - todo_business_rules: ビジネスルール検証
+# - todo_state_transitions: 状態遷移テスト
+# - event_sequencing: イベント順序付けテスト
 ```
+
+#### 今後の実装予定
+- DynamoDB統合テスト（TestContainers使用）
+- Lambda関数統合テスト  
+- E2Eテスト（Playwright使用）
+- 負荷テスト（K6使用）
 
 ## コード品質
 

@@ -108,7 +108,7 @@ test-unit:
 .PHONY: test-integration
 test-integration:
 	@echo "Running integration tests..."
-	cd backend && cargo test --test '*' --all-features
+	cd backend && cargo test --package integration-tests
 	@echo "Integration tests complete!"
 
 .PHONY: test-e2e

@@ -6,6 +6,7 @@ members = [
     "query-handler", 
     "event-processor",
     "snapshot-manager",
+    "tests/integration",
 ]
 
 [workspace.dependencies]

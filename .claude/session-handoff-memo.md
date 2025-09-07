@@ -52,35 +52,52 @@
   - `.env.example`テンプレート作成
   - フロントエンド・バックエンド統合設定
 
+### 6. テストスイート実装（2025-09-07完了）
+- ✅ **統合テスト基盤**: ドメインロジック統合テスト完成
+  - `backend/tests/integration/` 構造設計
+  - テストヘルパー・フィクスチャ実装
+  - 統合テスト専用Cargoワークスペース
+- ✅ **ドメインロジックテスト**: 4つの包括的テスト実装
+  - `test_todo_creation_and_modification`: Todo作成・更新・完了フロー
+  - `test_todo_business_rules`: ビジネスルール・バリデーション検証
+  - `test_todo_state_transitions`: 状態遷移ルール検証
+  - `test_event_sequencing`: イベント順序・バージョン管理テスト
+- ✅ **開発ワークフロー統合**: `make test-integration` コマンド
+  - 開発ドキュメント更新（DEVELOPMENT.md）
+  - 実際の実装に合わせたテストコード
+  - 全テストパス確認（4 passed; 0 failed）
+
 ## 🎯 現在の状態
 - **フロントエンド**: 完全にクリーンな状態（リント・ビルド成功）
 - **バックエンド**: 主要機能（command/query handler）は正常にコンパイル
 - **ドキュメント**: 包括的なドキュメント体系が完成
 - **ローカル開発環境**: 統合された開発ワークフロー完備
-- **全体**: 中核機能は動作可能、本格的な開発・運用準備完了
+- **統合テスト**: ドメインロジック統合テスト完成・全テストパス
+- **全体**: 中核機能は動作可能、テスト品質保証付きの開発・運用準備完了
 
 ## 🚧 次セッションでの作業候補
 
 ### 優先度B: 開発基盤の充実（継続）
 
-#### 6. テストスイート実装
+#### 7. 追加テストスイート実装
 ```bash
-# backend/tests/ - 統合テスト実装
-# frontend/tests/ - E2Eテスト実装  
+# DynamoDB統合テスト（TestContainers使用）
+# Lambda関数統合テスト
+# frontend/tests/ - E2Eテスト実装（Playwright）
 # 負荷テスト（K6スクリプト）作成
 # テストデータ生成・シードスクリプト
 ```
 
 ### 優先度C: 機能拡張
 
-#### 7. WebAuthn (Passkey) 認証
+#### 8. WebAuthn (Passkey) 認証
 ```bash
 # Cognito WebAuthn設定
 # フロントエンドPasskey実装
 # 認証フロー統合
 ```
 
-#### 8. リアルタイム同期（WebSocket）
+#### 9. リアルタイム同期（WebSocket）
 ```bash
 # API Gateway WebSocket API
 # Lambda WebSocket処理
@@ -91,7 +108,7 @@
 
 ### 新規作成されたドキュメント
 - `docs/api/README.md` - REST API詳細仕様書
-- `docs/DEVELOPMENT.md` - 開発ガイド
+- `docs/DEVELOPMENT.md` - 開発ガイド（統合テスト情報更新）
 - `docs/DEPLOYMENT.md` - デプロイガイド
 - `docs/architecture/OVERVIEW.md` - アーキテクチャ概要
 - `docs/architecture/PLANNING.md` - 詳細設計書（既存）
@@ -103,6 +120,12 @@
 - `backend/command-handler/` - 書き込み処理Lambda
 - `backend/query-handler/` - 読み取り処理Lambda
 - `backend/event-processor/` - イベント処理Lambda
+
+### 新規追加されたテストファイル
+- `backend/tests/integration/` - 統合テスト構造（NEW）
+- `backend/tests/integration/src/helpers.rs` - テストヘルパー関数
+- `backend/tests/integration/src/fixtures.rs` - テストフィクスチャ
+- `backend/tests/integration/tests/domain_logic_test.rs` - ドメインロジック統合テスト
 
 ### 設定ファイル
 - `backend/Cargo.toml` - Rustワークスペース設定
@@ -138,14 +161,15 @@
 - ✅ スナップショット機能
 - ✅ OpenTelemetry統合
 - ✅ CI/CD パイプライン
-- ✅ **ローカル開発環境整備** (NEW)
+- ✅ **ローカル開発環境整備** (2025-09-07)
+- ✅ **統合テスト実装** (NEW 2025-09-07)
 
-### 未実装機能 (5%)
-- ⬜ テストスイート実装（統合テスト、E2Eテスト、負荷テスト）
+### 未実装機能 (3%)
+- ⬜ 追加テストスイート（DynamoDB統合テスト、E2Eテスト、負荷テスト）
 - ⬜ WebAuthn認証
 - ⬜ WebSocketリアルタイム同期
 
 ---
 **作成日時**: 2025-08-31  
-**最終更新**: 2025-09-07 11:30  
-**作業完了率**: 95%（ローカル開発環境整備完了、残り5%はテストスイートと機能拡張）
+**最終更新**: 2025-09-07 13:50  
+**作業完了率**: 97%（統合テスト実装完了、残り3%は追加テストスイートと機能拡張）
