@@ -45,3 +45,7 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Lambda bootstrap files
+backend/*/bootstrap
+*.backup
