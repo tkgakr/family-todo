@@ -1,6 +1,6 @@
-version: "3.9"
 
 services:
+  # DynamoDB Local for testing
   dynamodb-local:
     image: amazon/dynamodb-local:latest
     container_name: todo-dynamodb
@@ -9,36 +9,82 @@ services:
     command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
     networks:
       - todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/ | grep -q 400"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
+  # LocalStack for AWS services emulation
   localstack:
     image: localstack/localstack:3.0
     container_name: todo-localstack
     ports:
       - "4566:4566"
-      - "4571:4571"
     environment:
       - SERVICES=cognito-idp,ses,sqs
-      - DEBUG=1
+      - DEBUG=0
       - DATA_DIR=/tmp/localstack/data
-      - LAMBDA_EXECUTOR=docker
-      - DOCKER_HOST=unix:///var/run/docker.sock
+      - PERSISTENCE=1
     volumes:
-      - "${TMPDIR:-/tmp}/localstack:/tmp/localstack"
+      - "localstack-data:/tmp/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
       - todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_localstack/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
+  # Redis for caching (future use)
   redis:
     image: redis:7-alpine
     container_name: todo-redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     networks:
       - todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+
+  # AWS CLI tools container for development
+  aws-cli:
+    image: amazon/aws-cli:latest
+    container_name: todo-aws-cli
+    environment:
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=ap-northeast-1
+    volumes:
+      - ./scripts:/scripts
+    networks:
+      - todo-network
+    profiles:
+      - tools
+    entrypoint: ["tail", "-f", "/dev/null"]
 
 networks:
   todo-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   localstack-data:
+    driver: local  
+  redis-data:
+    driver: local
