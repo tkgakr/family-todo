@@ -16,7 +16,7 @@ Globals:
     MemorySize: 512
     Runtime: provided.al2
     Architectures:
-      - arm64
+      - x86_64
     Environment:
       Variables:
         TABLE_NAME: !Ref MainTable
@@ -74,7 +74,7 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-TodoCommandHandler'
       CodeUri: ../backend/command-handler/
       Handler: bootstrap
-      ReservedConcurrencyLimit: 10
+      # ReservedConcurrencyLimit: 10
       Policies:
         - DynamoDBWritePolicy:
             TableName: !Ref MainTable
@@ -112,7 +112,7 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-TodoQueryHandler'
       CodeUri: ../backend/query-handler/
       Handler: bootstrap
-      ReservedConcurrencyLimit: 20
+      # ReservedConcurrencyLimit: 20
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref MainTable
@@ -152,7 +152,7 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-TodoEventProcessor'
       CodeUri: ../backend/event-processor/
       Handler: bootstrap
-      ReservedConcurrencyLimit: 5
+      # ReservedConcurrencyLimit: 5
       DeadLetterQueue:
         Type: SQS
         TargetArn: !GetAtt DeadLetterQueue.Arn
@@ -189,7 +189,7 @@ Resources:
       FunctionName: !Sub '${AWS::StackName}-TodoSnapshotManager'
       CodeUri: ../backend/snapshot-manager/
       Handler: bootstrap
-      ReservedConcurrencyLimit: 2
+      # ReservedConcurrencyLimit: 2
       DeadLetterQueue:
         Type: SQS
         TargetArn: !GetAtt SnapshotManagerDLQ.Arn
@@ -238,12 +238,12 @@ Resources:
         Authorizers:
           CognitoAuthorizer:
             UserPoolArn: !GetAtt CognitoUserPool.Arn
-      ThrottleConfig:
-        BurstLimit: 100
-        RateLimit: 50
-      RequestValidation:
-        ValidateRequestBody: true
-        ValidateRequestParameters: true
+      # ThrottleConfig:
+      #   BurstLimit: 100
+      #   RateLimit: 50
+      # RequestValidation:
+      #   ValidateRequestBody: true
+      #   ValidateRequestParameters: true
 
   # Cognito User Pool
   CognitoUserPool:
