@@ -13,7 +13,7 @@ AWS サーバーレス環境で動作する家族向け ToDo 共有アプリケ�
 - **データベース**: Amazon DynamoDB (Single Table Design)
 - **認証**: Amazon Cognito User Pool + JWT
 - **インフラ**: AWS SAM
-- **CI/CD**: GitHub Actions (準備中)
+- **CI/CD**: GitHub Actions + AWS SAM
 - **アーキテクチャ**: イベントソーシング + CQRS
 - **識別子**: ULID (時系列ソート可能)
 - **監視**: AWS X-Ray + CloudWatch
@@ -35,7 +35,11 @@ family-todo-claude/
 │   ├── architecture/     # アーキテクチャ設計書
 │   ├── DEVELOPMENT.md    # 開発ガイド
 │   └── DEPLOYMENT.md     # デプロイガイド
-└── env.json              # ローカル環境変数
+├── .github/workflows/    # CI/CDパイプライン
+├── Makefile              # 統合開発コマンド
+├── docker-compose.yml    # ローカル開発環境
+├── env.json              # ローカル環境変数
+└── .env.example          # 環境変数テンプレート
 ```
 
 ## セットアップ
@@ -56,24 +60,32 @@ git clone https://github.com/your-org/family-todo-claude.git
 cd family-todo-claude
 ```
 
-2. **バックエンドの起動**
+2. **環境変数の設定**
 ```bash
-# SAM でローカル API を起動
-sam build --use-container
-sam local start-api --warm-containers EAGER --port 3001 --env-vars env.json
+# 環境変数テンプレートをコピー
+cp .env.example .env
+# 必要に応じて .env を編集
 ```
 
-3. **フロントエンドの起動**
+3. **統合開発環境の起動**
 ```bash
-cd frontend
-npm install
-npm run dev
+# ローカル開発環境（Docker Compose）を起動
+make dev-up
+
+# 開発サーバーを起動（別ターミナル）
+make dev-servers
 ```
 
-4. **DynamoDB Local の起動** (オプション)
+4. **個別コンポーネントの起動**（オプション）
 ```bash
-docker run -p 8000:8000 amazon/dynamodb-local:latest \
-  -jar DynamoDBLocal.jar -sharedDb -inMemory
+# バックエンド API のみ
+make deploy-local
+
+# フロントエンドのみ
+cd frontend && npm run dev
+
+# データベースのみ
+make db-setup
 ```
 
 ### AWS デプロイ
@@ -103,14 +115,18 @@ sam deploy
 - ✅ レスポンシブな UI (React + Tailwind CSS)
 - ✅ AWS SAM によるインフラ管理
 - ✅ CloudWatch + X-Ray 監視
+- ✅ **楽観的ロック実装**
+- ✅ **スナップショット機能**
+- ✅ **OpenTelemetry統合**
+- ✅ **CI/CDパイプライン**
+- ✅ **ローカル開発環境整備**
 
 ### 開発予定
+- ⬜ **テストスイート実装**（統合テスト、E2Eテスト、負荷テスト）
 - ⬜ WebAuthn (Passkey) 認証
 - ⬜ リアルタイム同期 (WebSocket)
 - ⬜ プッシュ通知
 - ⬜ ファイル添付機能
-- ⬜ 楽観的ロック実装
-- ⬜ スナップショット機能
 
 ## API仕様
 
@@ -136,22 +152,28 @@ sam deploy
 
 ## テスト
 
-### Rust (バックエンド)
+### 統合テストコマンド
 ```bash
-cd backend
-cargo test
+# 全テスト実行
+make test
+
+# ユニットテストのみ
+make test-unit
+
+# 統合テストのみ
+make test-integration
+
+# E2Eテストのみ
+make test-e2e
 ```
 
-### TypeScript (フロントエンド)
+### 個別テスト実行
 ```bash
-cd frontend
-npm test
-```
+# Rust (バックエンド)
+cd backend && cargo test
 
-### 統合テスト (準備中)
-```bash
-cd tests
-npm run test:integration
+# TypeScript (フロントエンド) 
+cd frontend && npm test
 ```
 
 ## アーキテクチャの特徴
@@ -200,36 +222,45 @@ FAMILY#{familyId}#ACTIVE | {todoId}           | アクティブToDo一覧(GSI1)
 
 ## 開発コマンド
 
-### Rust (バックエンド)
+### 統合開発コマンド（推奨）
 ```bash
-cd backend
+# 環境管理
+make dev-up           # 開発環境起動
+make dev-down         # 開発環境停止
+make dev-status       # サービス状態確認
+make dev-servers      # 開発サーバー起動
 
-# フォーマット
-cargo fmt
+# コード品質
+make fmt              # フォーマット（Rust + TypeScript）
+make lint             # リンター（Rust + TypeScript）  
+make typecheck        # 型チェック（Rust + TypeScript）
 
-# リンター
-cargo clippy -- -D warnings
+# ビルド・デプロイ
+make build            # Lambda関数ビルド
+make build-frontend   # フロントエンドビルド
+make deploy-local     # ローカルAPIサーバー起動
 
-# セキュリティ監査
-cargo audit
-
-# テスト
-cargo test
+# データベース管理
+make db-setup         # DB初期化
+make db-reset         # DBリセット
+make db-seed          # テストデータ生成
 ```
 
-### TypeScript (フロントエンド)
+### 個別コマンド
 ```bash
-cd frontend
+# Rust (バックエンド)
+cd backend
+cargo fmt                    # フォーマット
+cargo clippy -- -D warnings # リンター
+cargo test                   # テスト
 
-# Biome によるフォーマット・リント
-npm run format
-npm run lint
-
-# テスト
-npm test
-
-# ビルド
-npm run build
+# TypeScript (フロントエンド)
+cd frontend  
+npm run format              # フォーマット
+npm run lint                # リンター
+npm run typecheck           # 型チェック
+npm test                    # テスト
+npm run build               # ビルド
 ```
 
 ## ライセンス

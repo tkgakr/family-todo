@@ -4,6 +4,7 @@
 
 Family Todo App を AWS にデプロイするためのガイドです。
 AWS SAM (Serverless Application Model) を使用してインフラを管理し、GitHub Actions で CI/CD パイプラインを実現しています。
+楽観的ロック、スナップショット機能、OpenTelemetry統合など、プロダクションレディな機能を含みます。
 
 ## アーキテクチャ図
 
@@ -20,10 +21,10 @@ AWS SAM (Serverless Application Model) を使用してインフラを管理し�
                                                           │
 ┌─────────────────────────────────────────────────────────┼──────────────────────────────────┐
 │                           AWS Lambda                     │                                  │
-├─────────────────┬─────────────────┬─────────────────────┴──────────────┐                   │
-│ Command Handler │ Query Handler   │         Event Processor              │                   │
-│   (書き込み)     │   (読み取り)    │        (イベント処理)                │                   │
-└─────────────────┴─────────────────┴──────────────────────────────────────┘                   │
+├─────────────────┬─────────────────┬─────────────────┬─────┴─────────────┐                   │
+│ Command Handler │ Query Handler   │ Event Processor │ Snapshot Manager  │                   │
+│   (書き込み)     │   (読み取り)    │  (イベント処理) │ (スナップショット) │                   │
+└─────────────────┴─────────────────┴─────────────────┴───────────────────┘                   │
                                                           │                                    │
                        ┌─────────────────┐              │                                    │
                        │   DynamoDB      │──────────────┘                                    │
@@ -72,6 +73,16 @@ export STACK_NAME=family-todo-app
 
 ### 1. 初回デプロイ
 
+#### 統合デプロイコマンド（推奨）
+
+```bash
+# ビルド
+make build
+
+# または個別に
+cd infra && sam build --use-container --parallel --cached
+```
+
 #### バックエンドのデプロイ
 
 ```bash
@@ -95,7 +106,10 @@ sam deploy --guided
 #### フロントエンドのビルドとデプロイ
 
 ```bash
-# フロントエンドのビルド
+# 統合コマンド（推奨）
+make build-frontend
+
+# または個別に
 cd frontend
 npm install
 npm run build
@@ -109,6 +123,9 @@ aws s3 sync dist/ s3://family-todo-app-frontend-prod/ --delete
 # CloudFront ディストリビューションの作成（オプション）
 # 詳細は「CloudFront セットアップ」セクションを参照
 ```
+
+> **注意**: GitHub Actions CI/CDパイプラインを使用する場合、手動デプロイは不要です。
+> mainブランチにプッシュすると自動的にデプロイされます。
 
 ### 2. 更新デプロイ
 
@@ -228,8 +245,20 @@ aws cloudfront create-invalidation \
 
 - **Command Handler エラー率**: 5分間で5エラー以上
 - **Query Handler エラー率**: 5分間で10エラー以上  
-- **高レイテンシ**: 平均5秒以上
+- **Event Processor エラー率**: 3分間で3エラー以上
+- **Snapshot Manager エラー率**: 1時間で1エラー以上
+- **高レイテンシ**: 平均200ms以上（ウォーム時）
 - **DLQ メッセージ**: メッセージが1件以上
+- **DynamoDB スロットリング**: 5分間で1回以上
+
+### OpenTelemetry メトリクス
+
+カスタムメトリクスも監視されます：
+
+- **コマンド実行数**: TodoCreated, TodoUpdated, TodoCompleted
+- **クエリ実行数**: GetTodo, ListTodos, GetHistory  
+- **イベント処理数**: 成功・失敗カウント
+- **スナップショット生成数**: 定期・しきい値による生成
 
 ### SNS 通知設定
 

@@ -3,7 +3,8 @@
 ## システム全体像
 
 Family Todo App は、イベントソーシング + CQRS パターンを採用した AWS サーバーレスアプリケーションです。
-家族間での ToDo 共有を目的とし、高い可用性、スケーラビリティ、監査可能性を重視して設計されています。
+家族間での ToDo 共有を目的とし、楽観的ロック、スナップショット機能、OpenTelemetry統合など、
+プロダクションレディな機能を含む高い可用性、スケーラビリティ、監査可能性を重視して設計されています。
 
 ## アーキテクチャ図
 
@@ -24,6 +25,7 @@ graph TB
         CH[Command Handler<br/>Lambda]
         QH[Query Handler<br/>Lambda]
         EP[Event Processor<br/>Lambda]
+        SM[Snapshot Manager<br/>Lambda]
     end
     
     subgraph "Data Layer"
@@ -57,6 +59,9 @@ graph TB
     CH --> XRAY
     QH --> XRAY
     EP --> XRAY
+    SM --> DB
+    SM --> CW
+    SM --> XRAY
     CW --> SNS
 ```
 
@@ -96,18 +101,20 @@ pub enum TodoEvent {
 - **Command Handler**: 書き込み処理、イベント生成
 - **Query Handler**: 読み取り処理、プロジェクション参照
 - **Event Processor**: イベントからプロジェクションへの更新
+- **Snapshot Manager**: スナップショット生成・管理
 
 ### 3. Single Table Design
 
 DynamoDB の効率的な利用のため、すべてのエンティティを単一テーブルに格納します。
 
 ```
-PK                     | SK                     | 用途
------------------------|------------------------|-------------------
-FAMILY#{family_id}     | EVENT#{event_id}       | イベント
-FAMILY#{family_id}     | TODO#CURRENT#{todo_id} | 現在のTodo状態
-FAMILY#{family_id}     | FAMILY#META           | 家族メタデータ
-FAMILY#{family_id}#ACTIVE | {todo_id}          | アクティブTodo(GSI1)
+PK                     | SK                         | 用途
+-----------------------|----------------------------|-------------------
+FAMILY#{family_id}     | EVENT#{event_id}           | イベント
+FAMILY#{family_id}     | TODO#CURRENT#{todo_id}     | 現在のTodo状態
+FAMILY#{family_id}     | TODO#SNAPSHOT#{todo_id}#{ulid} | スナップショット
+FAMILY#{family_id}     | FAMILY#META                | 家族メタデータ
+FAMILY#{family_id}#ACTIVE | {todo_id}              | アクティブTodo(GSI1)
 ```
 
 ## レイヤー別詳細
@@ -176,6 +183,17 @@ FAMILY#{family_id}#ACTIVE | {todo_id}          | アクティブTodo(GSI1)
 - バッチ処理対応
 - Dead Letter Queue 統合
 
+#### Snapshot Manager Lambda
+**責任:**
+- 定期スナップショット生成
+- しきい値ベーススナップショット
+- 古いスナップショットの削除
+
+**特徴:**
+- EventBridge 定期実行トリガー
+- イベント数しきい値（50件）による自動生成
+- TTLによる古いデータ自動削除
+
 ### データ層
 
 #### DynamoDB
@@ -197,15 +215,20 @@ FAMILY#{family_id}#ACTIVE | {todo_id}          | アクティブTodo(GSI1)
 
 ### 可観測性層
 
+#### OpenTelemetry統合
+- **構造化ログ**: コマンド・クエリ・イベント処理の詳細ログ
+- **分散トレーシング**: リクエストフロー全体の追跡
+- **カスタムメトリクス**: ビジネスKPI（Counter, Histogram）
+
 #### CloudWatch
-- **Logs**: 構造化ログ出力
-- **Metrics**: カスタムメトリクス
-- **Alarms**: 異常検知とアラート
+- **Logs**: OpenTelemetryによる構造化ログ出力
+- **Metrics**: システム・カスタムメトリクス統合監視
+- **Alarms**: エラー率・レイテンシ・スループット監視
 
 #### AWS X-Ray
-- **分散トレーシング**: リクエストフロー可視化
-- **パフォーマンス分析**: ボトルネック特定
-- **エラー分析**: 例外フロー追跡
+- **分散トレーシング**: マイクロサービス間通信可視化
+- **パフォーマンス分析**: ボトルネック・レイテンシ分析
+- **エラー分析**: 例外・障害フロー詳細追跡
 
 ## データフロー
 

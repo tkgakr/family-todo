@@ -66,12 +66,17 @@ family-todo-claude/
 │   ├── shared/            # 共通ドメインモデル・インフラ層
 │   ├── command-handler/   # 書き込み処理 Lambda
 │   ├── query-handler/     # 読み取り処理 Lambda
-│   └── event-processor/   # イベント処理 Lambda
+│   ├── event-processor/   # イベント処理 Lambda
+│   └── snapshot-manager/  # スナップショット管理 Lambda
 ├── frontend/              # React/TypeScript SPA
 ├── infra/                 # AWS SAM テンプレート
 ├── tests/                 # 統合テスト
 ├── docs/                  # ドキュメント
-└── env.json              # ローカル環境変数
+├── .github/workflows/     # CI/CDパイプライン
+├── Makefile               # 統合開発コマンド
+├── docker-compose.yml     # ローカル開発環境
+├── env.json               # ローカル環境変数
+└── .env.example           # 環境変数テンプレート
 ```
 
 ## 開発環境のセットアップ
@@ -86,11 +91,27 @@ cd family-todo-claude
 ### 2. 環境変数の設定
 
 ```bash
-cp env.json.example env.json
-# 必要に応じて環境変数を調整
+# 環境変数テンプレートをコピー
+cp .env.example .env
+# 必要に応じて .env を編集
+
+# env.json は既に設定済みのため通常は変更不要
 ```
 
-### 3. 依存関係のインストール
+### 3. 統合開発環境の起動（推奨）
+
+```bash
+# ローカル開発環境（Docker Compose）を起動
+make dev-up
+
+# 開発サーバーを起動（別ターミナル）
+make dev-servers
+
+# 開発環境の状態確認
+make dev-status
+```
+
+### 4. 個別セットアップ（オプション）
 
 #### バックエンド
 ```bash
@@ -112,68 +133,96 @@ npm install
 
 ## ローカル開発
 
-### SAM Local での API サーバー起動
+### 推奨: 統合開発コマンド
 
 ```bash
-# ビルド
-sam build --use-container
+# 開発環境管理
+make dev-up           # 開発環境起動（Docker Compose）
+make dev-down         # 開発環境停止
+make dev-status       # サービス状態確認
+make dev-servers      # 開発サーバー起動
 
-# ローカルAPI起動
-sam local start-api \
-  --warm-containers EAGER \
-  --port 3001 \
-  --env-vars env.json
+# ビルド・デプロイ  
+make build            # Lambda関数ビルド
+make build-frontend   # フロントエンドビルド
+make deploy-local     # ローカルAPIサーバー起動
+
+# データベース管理
+make db-setup         # DB初期化
+make db-reset         # DBリセット
+make db-seed          # テストデータ生成
 ```
 
-### フロントエンド開発サーバー起動
+### 個別起動（オプション）
 
+#### API サーバー
 ```bash
-cd frontend
-npm run dev
+# SAM でローカル API を起動
+make deploy-local
+# または
+cd infra && sam local start-api --port 3001 --env-vars ../env.json
 ```
 
-ブラウザで `http://localhost:3000` にアクセス
-
-### DynamoDB Local の起動
-
+#### フロントエンド開発サーバー
 ```bash
-docker run -p 8000:8000 amazon/dynamodb-local:latest \
-  -jar DynamoDBLocal.jar -sharedDb -inMemory
+cd frontend && npm run dev
 ```
 
-### 統合開発環境
+ブラウザで `http://localhost:5173` にアクセス
 
-すべてを一度に起動する場合：
-
+#### サービス起動確認
 ```bash
-# 並行実行でバックエンドとフロントエンドを起動
-npm run dev
+# 利用可能なサービス
+# - DynamoDB Local: http://localhost:8000
+# - LocalStack: http://localhost:4566  
+# - Redis: http://localhost:6379
+# - API: http://localhost:3001
+# - Frontend: http://localhost:5173
 ```
 
 ## テスト
 
-### 単体テスト
+### 推奨: 統合テストコマンド
+
+```bash
+# 全テスト実行
+make test
+
+# 個別テスト実行
+make test-unit         # ユニットテスト
+make test-integration  # 統合テスト
+make test-e2e          # E2Eテスト
+
+# コード品質チェック
+make fmt               # フォーマット（Rust + TypeScript）
+make lint              # リンター（Rust + TypeScript）
+make typecheck         # 型チェック（Rust + TypeScript）
+```
+
+### 個別テスト実行
 
 #### Rust (バックエンド)
 ```bash
 cd backend
-cargo test
+cargo test                    # 単体テスト
+cargo test --test '*'         # 統合テスト
+cargo fmt                     # フォーマット
+cargo clippy -- -D warnings  # リンター
 ```
 
 #### TypeScript (フロントエンド)
 ```bash
 cd frontend
-npm test
+npm run test:unit      # 単体テスト
+npm run test:e2e       # E2Eテスト
+npm run format         # フォーマット
+npm run lint           # リンター
+npm run typecheck      # 型チェック
 ```
 
-### 統合テスト
+### テストスイート（準備中）
 
-```bash
-cd tests
-npm run test:integration
-```
-
-### 負荷テスト
+統合テスト・E2Eテスト・負荷テストの実装予定：
 
 ```bash
 cd tests/load
