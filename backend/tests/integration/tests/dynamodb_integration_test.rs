@@ -59,11 +59,11 @@ async fn test_event_save_and_retrieve() -> Result<()> {
     };
 
     // イベント保存
-    repository.save_event(&family_id, &created_event).await?;
+    repository.await.save_event(&family_id, &created_event).await?;
 
     // イベント取得
     let retrieved_events = repository
-        .get_events_for_todo(&family_id, &todo_id)
+        .await.get_events_for_todo(&family_id, &todo_id)
         .await?;
 
     // 保存したイベントが取得できることを確認
@@ -107,10 +107,10 @@ async fn test_todo_projection_save_and_retrieve() -> Result<()> {
     todo.description = Some("プロジェクション保存・取得テスト".to_string());
 
     // Todo プロジェクション保存
-    repository.save_todo_projection(&family_id, &todo).await?;
+    repository.await.save_todo_projection(&family_id, &todo).await?;
 
     // Todo プロジェクション取得
-    let retrieved_todo = repository.get_todo(&family_id, &todo.id).await?;
+    let retrieved_todo = repository.await.get_todo(&family_id, &todo.id).await?;
 
     // データが正しく保存・取得されることを確認
     assert_eq!(retrieved_todo.title, "プロジェクション テスト Todo");
@@ -144,7 +144,7 @@ async fn test_active_todos_query() -> Result<()> {
         todo.title = format!("アクティブTodo {i}");
         todo.status = TodoStatus::Active;
 
-        repository.save_todo_projection(&family_id, &todo).await?;
+        repository.await.save_todo_projection(&family_id, &todo).await?;
     }
 
     // 完了済みのTodoも1個作成・保存（GSI1には含まれない）
@@ -158,7 +158,7 @@ async fn test_active_todos_query() -> Result<()> {
         .await?;
 
     // アクティブなTodo一覧を取得
-    let active_todos = repository.get_active_todos(&family_id, None).await?;
+    let active_todos = repository.await.get_active_todos(&family_id, None).await?;
 
     // アクティブなTodoのみ取得されることを確認
     assert_eq!(active_todos.len(), 3);
@@ -168,7 +168,7 @@ async fn test_active_todos_query() -> Result<()> {
     }
 
     // limit指定での取得テスト
-    let limited_todos = repository.get_active_todos(&family_id, Some(2)).await?;
+    let limited_todos = repository.await.get_active_todos(&family_id, Some(2)).await?;
     assert_eq!(limited_todos.len(), 2);
 
     Ok(())
@@ -189,7 +189,7 @@ async fn test_optimistic_locking_update() -> Result<()> {
     let todo = create_sample_todo();
 
     // 初期Todo保存
-    repository.save_todo_projection(&family_id, &todo).await?;
+    repository.await.save_todo_projection(&family_id, &todo).await?;
 
     // 正常な更新（正しいバージョン）
     let updates = TodoUpdates {
@@ -246,11 +246,11 @@ async fn test_snapshot_operations() -> Result<()> {
         created_at: Utc::now(),
     };
 
-    repository.save_snapshot(&family_id, &snapshot).await?;
+    repository.await.save_snapshot(&family_id, &snapshot).await?;
 
     // スナップショット取得
     let retrieved_snapshot = repository
-        .get_latest_snapshot(&family_id, &todo_id)
+        .await.get_latest_snapshot(&family_id, &todo_id)
         .await?;
 
     assert!(retrieved_snapshot.is_some());
@@ -307,12 +307,12 @@ async fn test_todo_rebuild_from_events() -> Result<()> {
 
     // イベントを順次保存
     for event in &events {
-        repository.save_event(&family_id, event).await?;
+        repository.await.save_event(&family_id, event).await?;
     }
 
     // イベントからTodoを再構築
     let rebuilt_todo = repository
-        .rebuild_todo_from_snapshot(&family_id, &todo_id)
+        .await.rebuild_todo_from_snapshot(&family_id, &todo_id)
         .await?;
 
     // 最終状態が正しく再構築されることを確認
@@ -343,20 +343,20 @@ async fn test_multiple_families_isolation() -> Result<()> {
     // 家族1のTodo作成・保存
     let mut todo_1 = create_sample_todo();
     todo_1.title = "家族1のTodo".to_string();
-    repository.save_todo_projection(&family_id_1, &todo_1).await?;
+    repository.await.save_todo_projection(&family_id_1, &todo_1).await?;
 
     // 家族2のTodo作成・保存
     let mut todo_2 = create_sample_todo();
     todo_2.title = "家族2のTodo".to_string();
-    repository.save_todo_projection(&family_id_2, &todo_2).await?;
+    repository.await.save_todo_projection(&family_id_2, &todo_2).await?;
 
     // 家族1のTodoが家族2のクエリに含まれないことを確認
-    let family_2_todos = repository.get_active_todos(&family_id_2, None).await?;
+    let family_2_todos = repository.await.get_active_todos(&family_id_2, None).await?;
     assert_eq!(family_2_todos.len(), 1);
     assert_eq!(family_2_todos[0].title, "家族2のTodo");
 
     // 家族2のTodoが家族1のクエリに含まれないことを確認
-    let family_1_todos = repository.get_active_todos(&family_id_1, None).await?;
+    let family_1_todos = repository.await.get_active_todos(&family_id_1, None).await?;
     assert_eq!(family_1_todos.len(), 1);
     assert_eq!(family_1_todos[0].title, "家族1のTodo");
 
