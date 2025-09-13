@@ -42,6 +42,10 @@ Thumbs.db
 # Coverage reports
 coverage/
 
+# Test results
+frontend/test-results/
+**/playwright-report/
+
 # Temporary files
 tmp/
 temp/
