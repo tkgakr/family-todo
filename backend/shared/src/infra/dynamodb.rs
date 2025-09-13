@@ -31,6 +31,13 @@ impl DynamoDbRepository {
         }
     }
 
+    pub fn new_with_client(client: DynamoDbClient, table_name: String) -> Self {
+        Self {
+            client,
+            table_name,
+        }
+    }
+
     pub async fn save_event(&self, family_id: &FamilyId, event: &TodoEvent) -> Result<()> {
         let event_id = event.event_id().as_str();
         let pk = format!("FAMILY#{}", family_id.as_str());
