@@ -11,9 +11,9 @@ pub struct StreamProcessor {
 }
 
 impl StreamProcessor {
-    pub fn new(table_name: String) -> Self {
+    pub async fn new(table_name: String) -> Self {
         Self {
-            event_processor: EventProcessor::new(table_name),
+            event_processor: EventProcessor::new(table_name).await,
         }
     }
 

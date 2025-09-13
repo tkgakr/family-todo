@@ -189,8 +189,8 @@ impl DynamoDbTestClient {
     }
 
     /// テスト用に設定されたDynamoDBリポジトリを作成
-    pub fn create_repository(&self) -> crate::DynamoDbRepository {
-        crate::DynamoDbRepository::new(self.table_name.clone())
+    pub async fn create_repository(&self) -> crate::DynamoDbRepository {
+        crate::DynamoDbRepository::new(self.table_name.clone()).await
     }
 }
 

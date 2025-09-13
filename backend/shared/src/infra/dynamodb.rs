@@ -4,7 +4,6 @@ use aws_sdk_dynamodb::{
     types::{AttributeValue, ReturnValue},
     Client as DynamoDbClient,
 };
-use once_cell::sync::Lazy;
 use serde_json;
 use std::collections::HashMap;
 use tracing::{error, info};
@@ -16,23 +15,18 @@ use crate::domain::{
     identifiers::{FamilyId, TodoId},
 };
 
-static DYNAMODB_CLIENT: Lazy<DynamoDbClient> = Lazy::new(|| {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-        DynamoDbClient::new(&config)
-    })
-});
-
 pub struct DynamoDbRepository {
-    client: &'static DynamoDbClient,
+    client: DynamoDbClient,
     table_name: String,
 }
 
 impl DynamoDbRepository {
-    pub fn new(table_name: String) -> Self {
+    pub async fn new(table_name: String) -> Self {
+        let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
+        let client = DynamoDbClient::new(&config);
+        
         Self {
-            client: &*DYNAMODB_CLIENT,
+            client,
             table_name,
         }
     }

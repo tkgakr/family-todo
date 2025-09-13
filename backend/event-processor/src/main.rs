@@ -24,7 +24,7 @@ async fn function_handler(event: LambdaEvent<DynamoDbEvent>) -> Result<BatchItem
 
     let table_name = std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string());
 
-    let processor = StreamProcessor::new(table_name);
+    let processor = StreamProcessor::new(table_name).await;
 
     match processor.process_records(dynamodb_event.records).await {
         Ok(failures) => {

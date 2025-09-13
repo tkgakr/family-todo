@@ -17,9 +17,9 @@ pub struct EventStore {
 }
 
 impl EventStore {
-    pub fn new(table_name: String) -> Self {
+    pub async fn new(table_name: String) -> Self {
         Self {
-            repository: DynamoDbRepository::new(table_name),
+            repository: DynamoDbRepository::new(table_name).await,
         }
     }
 
@@ -97,7 +97,7 @@ impl EventStore {
             tokio::spawn(async move {
                 let event_store = EventStore::new(
                     std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string()),
-                );
+                ).await;
                 if let Err(e) = event_store
                     .create_snapshot_if_needed(&family_id_clone, &todo_id_clone, event_count, None)
                     .await
@@ -169,9 +169,9 @@ pub struct EventProcessor {
 }
 
 impl EventProcessor {
-    pub fn new(table_name: String) -> Self {
+    pub async fn new(table_name: String) -> Self {
         Self {
-            repository: DynamoDbRepository::new(table_name),
+            repository: DynamoDbRepository::new(table_name).await,
         }
     }
 

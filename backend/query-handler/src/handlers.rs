@@ -21,10 +21,10 @@ pub struct QueryHandler {
 }
 
 impl QueryHandler {
-    pub fn new(table_name: String) -> Self {
+    pub async fn new(table_name: String) -> Self {
         Self {
-            repository: DynamoDbRepository::new(table_name.clone()),
-            event_store: EventStore::new(table_name),
+            repository: DynamoDbRepository::new(table_name.clone()).await,
+            event_store: EventStore::new(table_name).await,
         }
     }
 

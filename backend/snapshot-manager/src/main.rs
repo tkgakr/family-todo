@@ -14,7 +14,7 @@ const SNAPSHOT_THRESHOLD: usize = 50;
 
 async fn function_handler(event: LambdaEvent<Event>) -> Result<(), Error> {
     let table_name = env::var("TABLE_NAME").expect("TABLE_NAME must be set");
-    let repository = DynamoDbRepository::new(table_name);
+    let repository = DynamoDbRepository::new(table_name).await;
 
     for record in event.payload.records {
         if let Err(e) = process_record(&repository, record).await {

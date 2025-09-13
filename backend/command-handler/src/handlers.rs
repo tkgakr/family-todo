@@ -20,9 +20,9 @@ pub struct CommandHandler {
 }
 
 impl CommandHandler {
-    pub fn new(table_name: String) -> Self {
+    pub async fn new(table_name: String) -> Self {
         Self {
-            event_store: EventStore::new(table_name),
+            event_store: EventStore::new(table_name).await,
         }
     }
 

@@ -27,7 +27,7 @@ async fn function_handler(
 
     let table_name = std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string());
 
-    let handler = QueryHandler::new(table_name);
+    let handler = QueryHandler::new(table_name).await;
 
     match handler.handle_request(request).await {
         Ok(response) => {
