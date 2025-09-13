@@ -97,7 +97,8 @@ impl EventStore {
             tokio::spawn(async move {
                 let event_store = EventStore::new(
                     std::env::var("TABLE_NAME").unwrap_or_else(|_| "MainTable".to_string()),
-                ).await;
+                )
+                .await;
                 if let Err(e) = event_store
                     .create_snapshot_if_needed(&family_id_clone, &todo_id_clone, event_count, None)
                     .await

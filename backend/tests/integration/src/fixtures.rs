@@ -60,17 +60,15 @@ impl TodoFixtures {
         }
     }
 
-    pub fn sample_todo(
-        user_id: UserId,
-        todo_id: TodoId,
-    ) -> Todo {
+    pub fn sample_todo(user_id: UserId, todo_id: TodoId) -> Todo {
         Todo::new(
             todo_id,
             "Sample Todo".to_string(),
             Some("Sample Description".to_string()),
             vec!["sample".to_string()],
             user_id,
-        ).unwrap()
+        )
+        .unwrap()
     }
 }
 

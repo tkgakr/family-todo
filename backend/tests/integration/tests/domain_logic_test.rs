@@ -7,7 +7,7 @@ async fn test_todo_creation_and_modification() {
 
     // Todoアグリゲートを作成
     let mut todo = TodoFixtures::sample_todo(user_id.clone(), todo_id.clone());
-    
+
     assert_eq!(todo.id, todo_id);
     assert_eq!(todo.title, "Sample Todo");
     assert_eq!(todo.description, Some("Sample Description".to_string()));
@@ -26,16 +26,16 @@ async fn test_todo_creation_and_modification() {
     );
 
     todo.apply(update_event);
-    
+
     assert_eq!(todo.title, "Updated Title");
     assert_eq!(todo.description, Some("Updated Description".to_string()));
     assert!(todo.is_active());
 
     // Todoを完了するイベントを適用
     let complete_event = TodoFixtures::complete_todo_event(todo_id, user_id);
-    
+
     todo.apply(complete_event);
-    
+
     assert_eq!(todo.status, TodoStatus::Completed);
     assert!(todo.is_completed());
     assert!(!todo.is_active());
@@ -104,7 +104,8 @@ async fn test_todo_state_transitions() {
         None,
         Vec::new(),
         user_id.clone(),
-    ).unwrap();
+    )
+    .unwrap();
 
     // 初期状態はActive
     assert!(todo.can_be_updated());

@@ -24,18 +24,12 @@ impl DynamoDbRepository {
     pub async fn new(table_name: String) -> Self {
         let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
         let client = DynamoDbClient::new(&config);
-        
-        Self {
-            client,
-            table_name,
-        }
+
+        Self { client, table_name }
     }
 
     pub fn new_with_client(client: DynamoDbClient, table_name: String) -> Self {
-        Self {
-            client,
-            table_name,
-        }
+        Self { client, table_name }
     }
 
     pub async fn save_event(&self, family_id: &FamilyId, event: &TodoEvent) -> Result<()> {

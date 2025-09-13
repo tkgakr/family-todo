@@ -20,25 +20,23 @@ impl DynamoDbTestClient {
     /// 環境変数 DYNAMODB_ENDPOINT を指定することで接続先をカスタマイズ可能
     pub async fn new() -> Result<Self> {
         let table_name = "MainTable".to_string();
-        
+
         // docker-compose.ymlのDynamoDB Localに接続
-        let endpoint = env::var("DYNAMODB_ENDPOINT").unwrap_or_else(|_| "http://localhost:8000".to_string());
-        
+        let endpoint =
+            env::var("DYNAMODB_ENDPOINT").unwrap_or_else(|_| "http://localhost:8000".to_string());
+
         let config = aws_config::defaults(BehaviorVersion::latest())
             .endpoint_url(&endpoint)
             .region("ap-northeast-1")
             .credentials_provider(aws_sdk_dynamodb::config::SharedCredentialsProvider::new(
-                aws_sdk_dynamodb::config::Credentials::new("test", "test", None, None, "test")
+                aws_sdk_dynamodb::config::Credentials::new("test", "test", None, None, "test"),
             ))
             .load()
             .await;
-            
+
         let client = DynamoDbClient::new(&config);
 
-        let instance = Self {
-            client,
-            table_name,
-        };
+        let instance = Self { client, table_name };
 
         // テーブル作成（存在しない場合のみ）
         instance.ensure_table_exists().await?;

@@ -3,13 +3,11 @@ use chrono::Utc;
 use integration_tests::{
     create_sample_family_id, create_sample_todo, create_sample_todo_id, DynamoDbTestClient,
 };
-use shared::{
-    domain::{
-        aggregates::{TodoSnapshot, TodoStatus, TodoUpdates},
-        error::UpdateError,
-        events::TodoEvent,
-        identifiers::{FamilyId, TodoId, UserId, EventId},
-    },
+use shared::domain::{
+    aggregates::{TodoSnapshot, TodoStatus, TodoUpdates},
+    error::UpdateError,
+    events::TodoEvent,
+    identifiers::{EventId, FamilyId, TodoId, UserId},
 };
 
 #[tokio::test]
@@ -46,7 +44,7 @@ async fn test_event_save_and_retrieve() -> Result<()> {
     let todo_id = create_sample_todo_id();
 
     let user_id = UserId::new();
-    
+
     // TodoCreatedV2イベントを作成して保存
     let created_event = TodoEvent::TodoCreatedV2 {
         event_id: EventId::new(),
@@ -62,9 +60,7 @@ async fn test_event_save_and_retrieve() -> Result<()> {
     repository.save_event(&family_id, &created_event).await?;
 
     // イベント取得
-    let retrieved_events = repository
-        .get_events_for_todo(&family_id, &todo_id)
-        .await?;
+    let retrieved_events = repository.get_events_for_todo(&family_id, &todo_id).await?;
 
     // 保存したイベントが取得できることを確認
     assert_eq!(retrieved_events.len(), 1);
@@ -217,7 +213,10 @@ async fn test_optimistic_locking_update() -> Result<()> {
         .update_todo_with_lock(&family_id, &todo, old_version_updates)
         .await;
 
-    assert!(matches!(lock_error, Err(UpdateError::ConcurrentModification)));
+    assert!(matches!(
+        lock_error,
+        Err(UpdateError::ConcurrentModification)
+    ));
 
     Ok(())
 }
@@ -249,9 +248,7 @@ async fn test_snapshot_operations() -> Result<()> {
     repository.save_snapshot(&family_id, &snapshot).await?;
 
     // スナップショット取得
-    let retrieved_snapshot = repository
-        .get_latest_snapshot(&family_id, &todo_id)
-        .await?;
+    let retrieved_snapshot = repository.get_latest_snapshot(&family_id, &todo_id).await?;
 
     assert!(retrieved_snapshot.is_some());
     let retrieved_snapshot = retrieved_snapshot.unwrap();
@@ -277,7 +274,7 @@ async fn test_todo_rebuild_from_events() -> Result<()> {
     let todo_id = create_sample_todo_id();
 
     let user_id = UserId::new();
-    
+
     // 一連のイベントを作成・保存
     let events = vec![
         TodoEvent::TodoCreatedV2 {
@@ -343,12 +340,16 @@ async fn test_multiple_families_isolation() -> Result<()> {
     // 家族1のTodo作成・保存
     let mut todo_1 = create_sample_todo();
     todo_1.title = "家族1のTodo".to_string();
-    repository.save_todo_projection(&family_id_1, &todo_1).await?;
+    repository
+        .save_todo_projection(&family_id_1, &todo_1)
+        .await?;
 
     // 家族2のTodo作成・保存
     let mut todo_2 = create_sample_todo();
     todo_2.title = "家族2のTodo".to_string();
-    repository.save_todo_projection(&family_id_2, &todo_2).await?;
+    repository
+        .save_todo_projection(&family_id_2, &todo_2)
+        .await?;
 
     // 家族1のTodoが家族2のクエリに含まれないことを確認
     let family_2_todos = repository.get_active_todos(&family_id_2, None).await?;
