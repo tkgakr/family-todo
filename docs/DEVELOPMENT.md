@@ -238,10 +238,31 @@ cd backend && cargo test --package integration-tests
 # - event_sequencing: イベント順序付けテスト
 ```
 
+### E2Eテスト
+
+フロントエンドのE2Eテストが実装済み（Playwright使用）：
+
+```bash
+# E2Eテスト実行
+make test-e2e
+
+# または個別実行
+cd frontend && npm run test:e2e
+
+# 実装されたテスト:
+# - basic.spec.ts: アプリケーション基本動作テスト
+# - todo-operations.spec.ts: Todo操作フローテスト（認証設定後に有効化）
+```
+
+#### テスト環境構築
+1. **開発サーバー起動**: E2Eテストは自動的にフロントエンド開発サーバーを起動
+2. **認証設定**: AWS Cognitoテストユーザー設定が必要（未実装）
+3. **バックエンド連携**: SAMローカルAPIとの統合テスト（未実装）
+
 #### 今後の実装予定
-- DynamoDB統合テスト（TestContainers使用）
+- 認証フローの実装とテスト統合
+- バックエンドAPIとの連携テスト
 - Lambda関数統合テスト  
-- E2Eテスト（Playwright使用）
 - 負荷テスト（K6使用）
 
 ## コード品質
