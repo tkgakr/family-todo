@@ -1,9 +1,5 @@
 import { fetchAuthSession } from "aws-amplify/auth";
-import type {
-	CreateTodoRequest,
-	Todo,
-	UpdateTodoRequest,
-} from "../types/todo";
+import type { CreateTodoRequest, Todo, UpdateTodoRequest } from "../types/todo";
 
 const API_URL = import.meta.env.VITE_API_ENDPOINT;
 

@@ -33,10 +33,7 @@ async fn route_inner(
     method: &str,
 ) -> Result<Response<Body>, ApiError> {
     if method == "OPTIONS" {
-        return Ok(Response::builder()
-            .status(204)
-            .body(Body::Empty)
-            .unwrap());
+        return Ok(Response::builder().status(204).body(Body::Empty).unwrap());
     }
 
     let (family_id, user_id) = extract_claims(&req)?;
@@ -66,26 +63,23 @@ fn extract_claims(req: &Request) -> Result<(String, String), ApiError> {
     if let Some(lambda_http::request::RequestContext::ApiGatewayV2(ctx)) = context {
         if let Some(authorizer) = &ctx.authorizer {
             if let Some(jwt) = &authorizer.jwt {
-                let family_id = jwt
-                    .claims
-                    .get("custom:family_id")
-                    .cloned()
-                    .ok_or_else(|| {
+                let family_id =
+                    jwt.claims.get("custom:family_id").cloned().ok_or_else(|| {
                         ApiError::Unauthorized("Missing family_id claim".to_string())
                     })?;
                 let user_id = jwt
                     .claims
                     .get("sub")
                     .cloned()
-                    .ok_or_else(|| {
-                        ApiError::Unauthorized("Missing sub claim".to_string())
-                    })?;
+                    .ok_or_else(|| ApiError::Unauthorized("Missing sub claim".to_string()))?;
                 return Ok((family_id, user_id));
             }
         }
     }
 
-    Err(ApiError::Unauthorized("Invalid authorization context".to_string()))
+    Err(ApiError::Unauthorized(
+        "Invalid authorization context".to_string(),
+    ))
 }
 
 fn add_cors_headers(resp: &mut Response<Body>) {

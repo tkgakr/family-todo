@@ -34,11 +34,7 @@ impl DynamoClient {
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-        let todos = result
-            .items()
-            .iter()
-            .filter_map(|item| item_to_todo(item))
-            .collect();
+        let todos = result.items().iter().filter_map(item_to_todo).collect();
 
         Ok(todos)
     }
@@ -88,7 +84,8 @@ impl DynamoClient {
 
         if let Some(t) = title {
             update_parts.push("title = :title");
-            builder = builder.expression_attribute_values(":title", AttributeValue::S(t.to_string()));
+            builder =
+                builder.expression_attribute_values(":title", AttributeValue::S(t.to_string()));
         }
 
         if let Some(c) = completed {
@@ -105,7 +102,9 @@ impl DynamoClient {
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
         let item = result.attributes().ok_or(ApiError::NotFound)?;
-        item_to_todo(item).ok_or(ApiError::Internal("Failed to parse updated item".to_string()))
+        item_to_todo(item).ok_or(ApiError::Internal(
+            "Failed to parse updated item".to_string(),
+        ))
     }
 
     pub async fn delete_todo(&self, family_id: &str, todo_id: &str) -> Result<(), ApiError> {
@@ -125,9 +124,7 @@ impl DynamoClient {
     }
 }
 
-fn item_to_todo(
-    item: &std::collections::HashMap<String, AttributeValue>,
-) -> Option<Todo> {
+fn item_to_todo(item: &std::collections::HashMap<String, AttributeValue>) -> Option<Todo> {
     Some(Todo {
         id: item.get("id")?.as_s().ok()?.clone(),
         title: item.get("title")?.as_s().ok()?.clone(),

@@ -13,10 +13,7 @@ fn json_response(status: u16, body: &impl serde::Serialize) -> Result<Response<B
         .unwrap())
 }
 
-pub async fn list_todos(
-    db: &DynamoClient,
-    family_id: &str,
-) -> Result<Response<Body>, ApiError> {
+pub async fn list_todos(db: &DynamoClient, family_id: &str) -> Result<Response<Body>, ApiError> {
     let todos = db.list_todos(family_id).await?;
     json_response(200, &todos)
 }
@@ -90,8 +87,5 @@ pub async fn delete_todo(
     todo_id: &str,
 ) -> Result<Response<Body>, ApiError> {
     db.delete_todo(family_id, todo_id).await?;
-    Ok(Response::builder()
-        .status(204)
-        .body(Body::Empty)
-        .unwrap())
+    Ok(Response::builder().status(204).body(Body::Empty).unwrap())
 }
