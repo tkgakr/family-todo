@@ -1,0 +1,42 @@
+# Rust
+target/
+**/*.rs.bk
+*.pdb
+
+# Node.js / Bun
+node_modules/
+npm-debug.log*
+bun.lockb
+
+# Frontend build
+frontend/dist/
+frontend/build/
+
+# AWS SAM
+.aws-sam/
+samconfig.toml
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+playwright-report/
+test-results/
+
+# Temporary
+tmp/
+temp/

@@ -1,0 +1,63 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'template.yaml'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'template.yaml'
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'backend -> target'
+      - name: Check formatting
+        run: cargo fmt -- --check
+        working-directory: backend
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: backend
+      - name: Test
+        run: cargo test
+        working-directory: backend
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/setup-sam@v2
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: SAM build
+        run: sam build
+      - name: SAM deploy
+        run: |
+          sam deploy \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --stack-name family-todo \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides Environment=prod
